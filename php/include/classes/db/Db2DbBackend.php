@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -32,7 +32,7 @@ class Db2DbBackend extends DbBackend {
 	protected function checkDbVersionTable() {
 		global $DB;
 
-		$tabSchema = zbx_dbstr(!empty($DB['SCHEMA']) ? $DB['SCHEMA'] : zbx_strtoupper($DB['USER']));
+		$tabSchema = zbx_dbstr(!empty($DB['SCHEMA']) ? $DB['SCHEMA'] : strtoupper($DB['USER']));
 		$tableExists = DBfetch(DBselect('SELECT 1 FROM SYSCAT.TABLES'.
 			" WHERE TABNAME='DBVERSION'".
 				" AND TABSCHEMA=".$tabSchema));

@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -33,21 +33,28 @@ require_once dirname(__FILE__).'/include/page_header.php';
 $fields = array(
 	'fullscreen' =>		array(T_ZBX_INT,	O_OPT,		P_SYS,	IN('0,1'),	null),
 	'groupid' =>		array(T_ZBX_INT,	O_OPT,		P_SYS,	DB_ID,		null),
-	'hostid' =>		array(T_ZBX_INT,	O_OPT,		P_SYS,	DB_ID,		null),
+	'hostid' =>			array(T_ZBX_INT,	O_OPT,		P_SYS,	DB_ID,		null),
+	// sort and sortorder
+	'sort' =>			array(T_ZBX_STR, O_OPT, P_SYS, IN('"hostname","name"'),						null),
+	'sortorder' =>		array(T_ZBX_STR, O_OPT, P_SYS, IN('"'.ZBX_SORT_DOWN.'","'.ZBX_SORT_UP.'"'),	null)
 );
 check_fields($fields);
 
 /*
  * Permissions
  */
-if (get_request('groupid') && !API::HostGroup()->isReadable(array($_REQUEST['groupid']))) {
+if (getRequest('groupid') && !API::HostGroup()->isReadable(array($_REQUEST['groupid']))) {
 	access_deny();
 }
-if (get_request('hostid') && !API::Host()->isReadable(array($_REQUEST['hostid']))) {
+if (getRequest('hostid') && !API::Host()->isReadable(array($_REQUEST['hostid']))) {
 	access_deny();
 }
 
-validate_sort_and_sortorder('name', ZBX_SORT_DOWN);
+$sortField = getRequest('sort', CProfile::get('web.'.$page['file'].'.sort', 'name'));
+$sortOrder = getRequest('sortorder', CProfile::get('web.'.$page['file'].'.sortorder', ZBX_SORT_UP));
+
+CProfile::update('web.'.$page['file'].'.sort', $sortField, PROFILE_TYPE_STR);
+CProfile::update('web.'.$page['file'].'.sortorder', $sortOrder, PROFILE_TYPE_STR);
 
 $options = array(
 	'groups' => array(
@@ -58,19 +65,17 @@ $options = array(
 		'with_monitored_items' => true,
 		'with_httptests' => true
 	),
-	'hostid' => get_request('hostid', null),
-	'groupid' => get_request('groupid', null),
+	'hostid' => getRequest('hostid'),
+	'groupid' => getRequest('groupid'),
 );
 $pageFilter = new CPageFilter($options);
 $_REQUEST['groupid'] = $pageFilter->groupid;
 $_REQUEST['hostid'] = $pageFilter->hostid;
 
-$displayNodes = (is_array(get_current_nodeid()) && $pageFilter->groupid == 0 && $pageFilter->hostid == 0);
-
 $r_form = new CForm('get');
 $r_form->addVar('fullscreen', $_REQUEST['fullscreen']);
-$r_form->addItem(array(_('Group').SPACE,$pageFilter->getGroupsCB(true)));
-$r_form->addItem(array(SPACE._('Host').SPACE,$pageFilter->getHostsCB(true)));
+$r_form->addItem(array(_('Group').SPACE,$pageFilter->getGroupsCB()));
+$r_form->addItem(array(SPACE._('Host').SPACE,$pageFilter->getHostsCB()));
 
 $httpmon_wdgt = new CWidget();
 $httpmon_wdgt->addPageHeader(
@@ -83,9 +88,8 @@ $httpmon_wdgt->addHeaderRowNumber();
 // TABLE
 $table = new CTableInfo(_('No web scenarios found.'));
 $table->SetHeader(array(
-	$displayNodes ? _('Node') : null,
-	$_REQUEST['hostid'] == 0 ? make_sorting_header(_('Host'), 'hostname') : null,
-	make_sorting_header(_('Name'), 'name'),
+	$_REQUEST['hostid'] == 0 ? make_sorting_header(_('Host'), 'hostname', $sortField, $sortOrder) : null,
+	make_sorting_header(_('Name'), 'name', $sortField, $sortOrder),
 	_('Number of steps'),
 	_('Last check'),
 	_('Status')
@@ -127,22 +131,36 @@ if ($pageFilter->hostsSelected) {
 
 	$httpTests = resolveHttpTestMacros($httpTests, true, false);
 
-	order_result($httpTests, getPageSortField('name'), getPageSortOrder());
+	order_result($httpTests, $sortField, $sortOrder);
 
 	// fetch the latest results of the web scenario
 	$lastHttpTestData = Manager::HttpTest()->getLastData(array_keys($httpTests));
 
-	foreach($httpTests as $httpTest) {
-		$lastData = isset($lastHttpTestData[$httpTest['httptestid']]) ? $lastHttpTestData[$httpTest['httptestid']] : null;
+	foreach ($httpTests as $httpTest) {
+		if (isset($lastHttpTestData[$httpTest['httptestid']])
+				&& $lastHttpTestData[$httpTest['httptestid']]['lastfailedstep'] !== null) {
+			$lastData = $lastHttpTestData[$httpTest['httptestid']];
 
-		// test has history data
-		if ($lastData) {
-			$lastcheck = zbx_date2str(_('d M Y H:i:s'), $lastData['lastcheck']);
+			$lastcheck = zbx_date2str(DATE_TIME_FORMAT_SECONDS, $lastData['lastcheck']);
 
 			if ($lastData['lastfailedstep'] != 0) {
-				$step_data = get_httpstep_by_no($httpTest['httptestid'], $lastData['lastfailedstep']);
-				$status['msg'] = _s('Step "%1$s" [%2$s of %3$s] failed: %4$s', $step_data['name'],
-					$lastData['lastfailedstep'], $httpTest['steps'], $lastData['error']);
+				$stepData = get_httpstep_by_no($httpTest['httptestid'], $lastData['lastfailedstep']);
+
+				$error = ($lastData['error'] === null) ? _('Unknown error') : $lastData['error'];
+
+				if ($stepData) {
+					$status['msg'] = _s(
+						'Step "%1$s" [%2$s of %3$s] failed: %4$s',
+						$stepData['name'],
+						$lastData['lastfailedstep'],
+						$httpTest['steps'],
+						$error
+					);
+				}
+				else {
+					$status['msg'] = _s('Unknown step failed: %1$s', $error);
+				}
+
 				$status['style'] = 'disabled';
 			}
 			else {
@@ -152,7 +170,7 @@ if ($pageFilter->hostsSelected) {
 		}
 		// no history data exists
 		else {
-			$lastcheck =  _('Never');
+			$lastcheck = _('Never');
 			$status['msg'] = _('Unknown');
 			$status['style'] = 'unknown';
 		}
@@ -161,7 +179,6 @@ if ($pageFilter->hostsSelected) {
 			($httpTest['host']['status'] == HOST_STATUS_NOT_MONITORED) ? 'not-monitored' : ''
 		);
 		$table->addRow(new CRow(array(
-			$displayNodes ? get_node_name_by_elid($httpTest['httptestid'], true) : null,
 			($_REQUEST['hostid'] > 0) ? null : $cpsan,
 			new CLink($httpTest['name'], 'httpdetails.php?httptestid='.$httpTest['httptestid']),
 			$httpTest['steps'],

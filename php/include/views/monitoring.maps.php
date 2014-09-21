@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -26,9 +26,9 @@ $mapTable->setAttribute('style', 'margin-top: 4px;');
 $icon = $fsIcon = null;
 
 if (!empty($this->data['maps'])) {
-	$mapComboBox = new CComboBox('sysmapid', get_request('sysmapid', 0), 'submit()');
+	$mapComboBox = new CComboBox('sysmapid', getRequest('sysmapid', 0), 'submit()');
 	foreach ($this->data['maps'] as $sysmapId => $map) {
-		$mapComboBox->addItem($sysmapId, get_node_name_by_elid($sysmapId, null, NAME_DELIMITER).$map['name']);
+		$mapComboBox->addItem($sysmapId, $map['name']);
 	}
 
 	$headerMapForm = new CForm('get');
@@ -47,7 +47,7 @@ if (!empty($this->data['maps'])) {
 		// check for permissions
 		if (isset($this->data['maps'][$parent['sysmapid']])) {
 			$parentMaps[] = SPACE.SPACE;
-			$parentMaps[] = new Clink($parent['name'], 'maps.php?sysmapid='.$parent['sysmapid'].'&fullscreen='.$this->data['fullscreen'].'&severity_min='.$this->data['severity_min']);
+			$parentMaps[] = new CLink($parent['name'], 'maps.php?sysmapid='.$parent['sysmapid'].'&fullscreen='.$this->data['fullscreen'].'&severity_min='.$this->data['severity_min']);
 		}
 	}
 	if (!empty($parentMaps)) {

@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -100,20 +100,26 @@ class CLineGraphDraw extends CGraphDraw {
 			$drawtype = GRAPH_ITEM_DRAWTYPE_FILLED_REGION;
 		}
 
-		$item = get_item_by_itemid($itemid);
+		// TODO: graphs shouldn't retrieve items and resolve macros themselves
+		// all of the data must be passed as parameters
+		$items = CMacrosResolverHelper::resolveItemNames(array(get_item_by_itemid($itemid)));
+		$item = reset($items);
+
+		$item['name'] = $item['name_expanded'];
+
 		$this->items[$this->num] = $item;
-		$this->items[$this->num]['name'] = itemName($item);
 		$this->items[$this->num]['delay'] = getItemDelay($item['delay'], $item['delay_flex']);
 
-		if (strpos($item['units'], ',') !== false) {
-			list($this->items[$this->num]['units'], $this->items[$this->num]['unitsLong']) = explode(',', $item['units']);
+		if (strpos($item['units'], ',') === false) {
+			$this->items[$this->num]['unitsLong'] = '';
 		}
 		else {
-			$this->items[$this->num]['unitsLong'] = '';
+			list($this->items[$this->num]['units'], $this->items[$this->num]['unitsLong']) = explode(',', $item['units']);
 		}
 
 		$host = get_host_by_hostid($item['hostid']);
 
+		$this->items[$this->num]['host'] = $host['host'];
 		$this->items[$this->num]['hostname'] = $host['name'];
 		$this->items[$this->num]['color'] = is_null($color) ? 'Dark Green' : $color;
 		$this->items[$this->num]['drawtype'] = is_null($drawtype) ? GRAPH_ITEM_DRAWTYPE_LINE : $drawtype;
@@ -128,6 +134,7 @@ class CLineGraphDraw extends CGraphDraw {
 		if ($this->items[$this->num]['axisside'] == GRAPH_YAXIS_SIDE_RIGHT) {
 			$this->yaxisright = 1;
 		}
+
 		$this->num++;
 	}
 
@@ -257,7 +264,7 @@ class CLineGraphDraw extends CGraphDraw {
 						'SUM(num) AS count,AVG(value_avg) AS avg,MIN(value_min) AS min,'.
 						'MAX(value_max) AS max,MAX(clock) AS clock'.
 					' FROM trends'.
-					' WHERE itemid='.$this->items[$i]['itemid'].
+					' WHERE itemid='.zbx_dbstr($this->items[$i]['itemid']).
 						' AND clock>='.zbx_dbstr($from_time).
 						' AND clock<='.zbx_dbstr($to_time).
 					' GROUP BY itemid,'.$calc_field
@@ -389,7 +396,7 @@ class CLineGraphDraw extends CGraphDraw {
 			}
 		}
 
-		// calculte shift for stacked graphs
+		// calculate shift for stacked graphs
 		if ($this->type == GRAPH_TYPE_STACKED) {
 			for ($i = 1; $i < $this->num; $i++) {
 				$curr_data = &$this->data[$this->items[$i]['itemid']][$this->items[$i]['calc_type']];
@@ -450,14 +457,19 @@ class CLineGraphDraw extends CGraphDraw {
 				' ORDER BY tr.priority'
 			);
 			while (($trigger = DBfetch($db_triggers)) && $cnt < $max) {
-				$db_fnc_cnt = DBselect('SELECT COUNT(*) AS cnt FROM functions f WHERE f.triggerid='.$trigger['triggerid']);
+				$db_fnc_cnt = DBselect(
+					'SELECT COUNT(*) AS cnt'.
+					' FROM functions f'.
+					' WHERE f.triggerid='.zbx_dbstr($trigger['triggerid'])
+				);
 				$fnc_cnt = DBfetch($db_fnc_cnt);
 
 				if ($fnc_cnt['cnt'] != 1) {
 					continue;
 				}
 
-				$trigger = API::UserMacro()->resolveTrigger($trigger);
+				$trigger['expression'] = CMacrosResolverHelper::resolveTriggerExpressionUserMacro($trigger);
+
 				if (!preg_match('/^\{([0-9]+)\}\s*?([\<\>\=]{1})\s*?([\-0-9\.]+)([TGMKsmhdw]?)$/', $trigger['expression'], $arr)) {
 					continue;
 				}
@@ -689,6 +701,19 @@ class CLineGraphDraw extends CGraphDraw {
 		return $maxY;
 	}
 
+	/**
+	 * Check if Y axis min value is larger than Y axis max value. Show error instead of graph if true.
+	 *
+	 * @param float $min		Y axis min value
+	 * @param float $max		Y axis max value
+	 */
+	protected function validateMinMax($min, $max) {
+		if (bccomp($min, $max) == 0 || bccomp($min, $max) == 1) {
+			show_error_message(_('Y axis MAX value must be greater than Y axis MIN value.'));
+			exit;
+		}
+	}
+
 	protected function calcZero() {
 		if (isset($this->axis_valuetype[GRAPH_YAXIS_SIDE_RIGHT])) {
 			$sides[] = GRAPH_YAXIS_SIDE_RIGHT;
@@ -774,8 +799,11 @@ class CLineGraphDraw extends CGraphDraw {
 				continue;
 			}
 
-			if ($this->type == GRAPH_TYPE_STACKED) {
+			if (($this->ymin_type != GRAPH_YAXIS_TYPE_FIXED || $this->ymax_type != GRAPH_YAXIS_TYPE_CALCULATED)
+					&& $this->type == GRAPH_TYPE_STACKED) {
 				$this->m_minY[$side] = min($this->m_minY[$side], 0);
+				$this->validateMinMax($this->m_minY[$side], $this->m_maxY[$side]);
+
 				continue;
 			}
 
@@ -784,7 +812,10 @@ class CLineGraphDraw extends CGraphDraw {
 				if ($this->ymin_type == GRAPH_YAXIS_TYPE_CALCULATED
 						&& ($this->m_minY[$side] == null || bccomp($this->m_maxY[$side], $this->m_minY[$side]) == 0
 								|| bccomp($this->m_maxY[$side], $this->m_minY[$side]) == -1)) {
-					if ($this->m_maxY[$side] > 0) {
+					if ($this->m_maxY[$side] == 0) {
+						$this->m_minY[$side] = -1;
+					}
+					elseif ($this->m_maxY[$side] > 0) {
 						$this->m_minY[$side] = bcmul($this->m_maxY[$side], 0.8);
 					}
 					else {
@@ -806,6 +837,8 @@ class CLineGraphDraw extends CGraphDraw {
 					}
 				}
 			}
+
+			$this->validateMinMax($this->m_minY[$side], $this->m_maxY[$side]);
 		}
 
 		$side = GRAPH_YAXIS_SIDE_LEFT;
@@ -941,8 +974,8 @@ class CLineGraphDraw extends CGraphDraw {
 			$interval = 1;
 
 			foreach ($intervals as $int) {
-			if (bccomp($dist, bcmul($this->gridLinesCount[$side], $int)) == -1) {
-				$interval = $int;
+				if (bccomp($dist, bcmul($this->gridLinesCount[$side], $int)) == -1) {
+					$interval = $int;
 					break;
 				}
 			}
@@ -1002,6 +1035,8 @@ class CLineGraphDraw extends CGraphDraw {
 			elseif ($this->ymin_type == GRAPH_YAXIS_TYPE_ITEM_VALUE) {
 				$this->m_minY[$graphSide] = $tmp_minY[$graphSide];
 			}
+
+			$this->validateMinMax($this->m_minY[$graphSide], $this->m_maxY[$graphSide]);
 		}
 
 		// division by zero
@@ -1834,17 +1869,15 @@ class CLineGraphDraw extends CGraphDraw {
 			else {
 				$colorSquare = imagecreate(11, 11);
 			}
+
 			imagefill($colorSquare, 0, 0, $this->getColor($this->graphtheme['backgroundcolor'], 0));
 			imagefilledrectangle($colorSquare, 0, 0, 10, 10, $color);
 			imagerectangle($colorSquare, 0, 0, 10, 10, $this->getColor('Black'));
 
-			// item caption
-			if ($this->itemsHost) {
-				$item_caption = $this->items[$i]['name'];
-			}
-			else {
-				$item_caption = $this->items[$i]['hostname'].NAME_DELIMITER.$this->items[$i]['name'];
-			}
+			// caption
+			$itemCaption = $this->itemsHost
+				? $this->items[$i]['name_expanded']
+				: $this->items[$i]['hostname'].NAME_DELIMITER.$this->items[$i]['name_expanded'];
 
 			// draw legend of an item with data
 			if (isset($data) && isset($data['min'])) {
@@ -1856,7 +1889,7 @@ class CLineGraphDraw extends CGraphDraw {
 				}
 
 				$legend->addCell($rowNum, array('image' => $colorSquare, 'marginRight' => 5));
-				$legend->addCell($rowNum, array('text' => $item_caption));
+				$legend->addCell($rowNum, array('text' => $itemCaption));
 				$legend->addCell($rowNum, array('text' => '['.$fncRealName.']'));
 				$legend->addCell($rowNum, array(
 					'text' => convert_units(array(
@@ -1894,12 +1927,14 @@ class CLineGraphDraw extends CGraphDraw {
 			// draw legend of an item without data
 			else {
 				$legend->addCell($rowNum, array('image' => $colorSquare, 'marginRight' => 5));
-				$legend->addCell($rowNum, array('text' => $item_caption));
-				$legend->addCell($rowNum, array('text' => '[ '._('no data').' ]'));
+				$legend->addCell($rowNum, array('text' => $itemCaption));
+				$legend->addCell($rowNum, array('text' => '['._('no data').']'));
 			}
 
 			$rowNum++;
 
+			// legends for stacked graphs are written in reverse order so that the order of items
+			// matches the order of lines on the graphs
 			if ($this->type == GRAPH_TYPE_STACKED) {
 				$i--;
 			}
@@ -1907,6 +1942,7 @@ class CLineGraphDraw extends CGraphDraw {
 				$i++;
 			}
 		}
+
 		$legend->draw();
 
 		// if graph is small, we are not drawing percent line and trigger legends
@@ -2132,10 +2168,10 @@ class CLineGraphDraw extends CGraphDraw {
 				$a[6] = $x2;
 				$a[7] = $y2max;
 
-			// don't use break, avg must be drawed in this statement
+			// don't use break, avg must be drawn in this statement
 			case CALC_FNC_AVG:
 
-			// don't use break, avg must be drawed in this statement
+			// don't use break, avg must be drawn in this statement
 			default:
 				$y1 = $y1avg;
 				$y2 = $y2avg;

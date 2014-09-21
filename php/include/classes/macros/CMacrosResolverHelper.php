@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -28,6 +28,17 @@ class CMacrosResolverHelper {
 	 * @var CMacrosResolver
 	 */
 	private static $macrosResolver;
+
+	/**
+	 * Create CMacrosResolver object and store in static variable.
+	 *
+	 * @static
+	 */
+	private static function init() {
+		if (self::$macrosResolver === null) {
+			self::$macrosResolver = new CMacrosResolver();
+		}
+	}
 
 	/**
 	 * Resolve macros.
@@ -291,6 +302,33 @@ class CMacrosResolverHelper {
 	}
 
 	/**
+	 * Resolve user macros in trigger expression.
+	 *
+	 * @static
+	 *
+	 * @param array $trigger
+	 * @param array $trigger['triggerid']
+	 * @param array $trigger['expression']
+	 *
+	 * @return string
+	 */
+	public static function resolveTriggerExpressionUserMacro(array $trigger) {
+		if (zbx_empty($trigger['expression'])) {
+			return $trigger['expression'];
+		}
+
+		self::init();
+
+		$triggers = self::$macrosResolver->resolve(array(
+			'config' => 'triggerExpressionUser',
+			'data' => zbx_toHash(array($trigger), 'triggerid')
+		));
+		$trigger = reset($triggers);
+
+		return $trigger['expression'];
+	}
+
+	/**
 	 * Resolve macros in event description.
 	 *
 	 * @static
@@ -314,6 +352,8 @@ class CMacrosResolverHelper {
 	/**
 	 * Resolve positional macros and functional item macros, for example, {{HOST.HOST1}:key.func(param)}.
 	 *
+	 * @static
+	 *
 	 * @param type   $name					string in which macros should be resolved
 	 * @param array  $items					list of graph items
 	 * @param int    $items[n]['hostid']	graph n-th item corresponding host Id
@@ -321,7 +361,7 @@ class CMacrosResolverHelper {
 	 *
 	 * @return string	string with macros replaced with corresponding values
 	 */
-	public static function resolveGraphName($name, $items) {
+	public static function resolveGraphName($name, array $items) {
 		self::init();
 
 		$graph = self::$macrosResolver->resolve(array(
@@ -335,8 +375,9 @@ class CMacrosResolverHelper {
 
 	/**
 	 * Resolve positional macros and functional item macros, for example, {{HOST.HOST1}:key.func(param)}.
+	 * ! if same graph will be passed more than once only name for first entry will be resolved.
 	 *
-	 *  ! if same graph will be passed more than once only name for first entry will be resolved.
+	 * @static
 	 *
 	 * @param array  $data					list or hashmap of graphs
 	 * @param int    $data[n]['graphid']	id of graph
@@ -344,7 +385,7 @@ class CMacrosResolverHelper {
 	 *
 	 * @return array	inputted data with resolved names
 	 */
-	public static function resolveGraphNameByIds($data) {
+	public static function resolveGraphNameByIds(array $data) {
 		self::init();
 
 		$graphIds = array();
@@ -392,13 +433,117 @@ class CMacrosResolverHelper {
 	}
 
 	/**
-	 * Create CMacrosResolver object and store in static variable.
+	 * Resolve item name macros to "name_expanded" field.
 	 *
 	 * @static
+	 *
+	 * @param array  $items
+	 * @param string $items[n]['itemid']
+	 * @param string $items[n]['hostid']
+	 * @param string $items[n]['name']
+	 * @param string $items[n]['key_']				item key (optional)
+	 *												but is (mandatory) if macros exist and "key_expanded" is not present
+	 * @param string $items[n]['key_expanded']		expanded item key (optional)
+	 *
+	 * @return array
 	 */
-	private static function init() {
-		if (self::$macrosResolver === null) {
-			self::$macrosResolver = new CMacrosResolver();
-		}
+	public static function resolveItemNames(array $items) {
+		self::init();
+
+		return self::$macrosResolver->resolveItemNames($items);
+	}
+
+	/**
+	 * Resolve item key macros to "key_expanded" field.
+	 *
+	 * @static
+	 *
+	 * @param array  $items
+	 * @param string $items[n]['itemid']
+	 * @param string $items[n]['hostid']
+	 * @param string $items[n]['key_']
+	 *
+	 * @return array
+	 */
+	public static function resolveItemKeys(array $items) {
+		self::init();
+
+		return self::$macrosResolver->resolveItemKeys($items);
+	}
+
+	/**
+	 * Resolve function parameter macros to "parameter_expanded" field.
+	 *
+	 * @static
+	 *
+	 * @param array  $data
+	 * @param string $data[n]['hostid']
+	 * @param string $data[n]['parameter']
+	 *
+	 * @return array
+	 */
+	public static function resolveFunctionParameters(array $data) {
+		self::init();
+
+		return self::$macrosResolver->resolveFunctionParameters($data);
+	}
+
+	/**
+	 * Expand functional macros in given map label.
+	 *
+	 * @param string $label			label to expand
+	 * @param array  $replaceHosts	list of hosts in order which they appear in trigger expression if trigger label is
+	 * given, or single host when host label is given
+	 *
+	 * @return string
+	 */
+	public static function resolveMapLabelMacros($label, $replaceHosts = null) {
+		self::init();
+
+		return self::$macrosResolver->resolveMapLabelMacros($label, $replaceHosts);
+	}
+
+	/**
+	 * Resolve all kinds of macros in map labels.
+	 *
+	 * @static
+	 *
+	 * @param array  $selement
+	 * @param string $selement['label']						label to expand
+	 * @param int    $selement['elementtype']				element type
+	 * @param int    $selement['elementid']					element id
+	 * @param string $selement['elementExpressionTrigger']	if type is trigger, then trigger expression
+	 *
+	 * @return string
+	 */
+	public static function resolveMapLabelMacrosAll(array $selement) {
+		self::init();
+
+		return self::$macrosResolver->resolveMapLabelMacrosAll($selement);
+	}
+
+	/**
+	 * Resolve macros in screen element URL.
+	 *
+	 * @static
+	 *
+	 * @param array $screenElement
+	 *
+	 * @return string
+	 */
+	public static function resolveScreenElementURL(array $screenElement) {
+		self::init();
+
+		$macros = self::$macrosResolver->resolve(array(
+			'config' => $screenElement['config'],
+			'data' => array(
+				$screenElement['hostid'] => array(
+					'url' => $screenElement['url']
+				)
+			)
+		));
+		$macros = reset($macros);
+
+		return $macros['url'];
 	}
 }

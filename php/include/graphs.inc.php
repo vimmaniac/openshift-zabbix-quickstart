@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -35,16 +35,6 @@ function graphType($type = null) {
 	}
 	else {
 		return _('Unknown');
-	}
-}
-
-function graph_item_type2str($type) {
-	switch ($type) {
-		case GRAPH_ITEM_SUM:
-			return _('Graph sum');
-		case GRAPH_ITEM_SIMPLE:
-		default:
-			return _('Simple');
 	}
 }
 
@@ -148,18 +138,8 @@ function getGraphDims($graphid = null) {
 	return $graphDims;
 }
 
-function get_graphs_by_hostid($hostid) {
-	return DBselect(
-		'SELECT DISTINCT g.*'.
-		' FROM graphs g,graphs_items gi,items i'.
-		' WHERE g.graphid=gi.graphid'.
-			' AND gi.itemid=i.itemid'.
-			' AND i.hostid='.zbx_dbstr($hostid)
-	);
-}
-
 function get_realhosts_by_graphid($graphid) {
-	$graph = get_graph_by_graphid($graphid);
+	$graph = getGraphByGraphId($graphid);
 	if (!empty($graph['templateid'])) {
 		return get_realhosts_by_graphid($graph['templateid']);
 	}
@@ -284,14 +264,14 @@ function get_min_itemclock_by_itemid($itemIds) {
 	return $min ? $min: $result;
 }
 
-function get_graph_by_graphid($graphid) {
-	$dbGraphs = DBselect('SELECT g.* FROM graphs g WHERE g.graphid='.zbx_dbstr($graphid));
-	$dbGraphs = DBfetch($dbGraphs);
-	if (!empty($dbGraphs)) {
-		return $dbGraphs;
+function getGraphByGraphId($graphId) {
+	$dbGraph = DBfetch(DBselect('SELECT g.* FROM graphs g WHERE g.graphid='.zbx_dbstr($graphId)));
+
+	if ($dbGraph) {
+		return $dbGraph;
 	}
 
-	error(_s('No graph item with graphid "%s".', $graphid));
+	error(_s('No graph item with graphid "%s".', $graphId));
 
 	return false;
 }
@@ -406,12 +386,12 @@ function navigation_bar_calc($idx = null, $idx2 = 0, $update = false) {
 				CProfile::update($idx.'.stime', $_REQUEST['stime'], PROFILE_TYPE_STR, $idx2);
 			}
 		}
-		$_REQUEST['period'] = get_request('period', CProfile::get($idx.'.period', ZBX_PERIOD_DEFAULT, $idx2));
-		$_REQUEST['stime'] = get_request('stime', CProfile::get($idx.'.stime', null, $idx2));
+		$_REQUEST['period'] = getRequest('period', CProfile::get($idx.'.period', ZBX_PERIOD_DEFAULT, $idx2));
+		$_REQUEST['stime'] = getRequest('stime', CProfile::get($idx.'.stime', null, $idx2));
 	}
 
-	$_REQUEST['period'] = get_request('period', ZBX_PERIOD_DEFAULT);
-	$_REQUEST['stime'] = get_request('stime', null);
+	$_REQUEST['period'] = getRequest('period', ZBX_PERIOD_DEFAULT);
+	$_REQUEST['stime'] = getRequest('stime');
 
 	if ($_REQUEST['period'] < ZBX_MIN_PERIOD) {
 		show_message(_n('Minimum time period to display is %1$s hour.',
@@ -463,10 +443,10 @@ function get_next_color($palettetype = 0) {
 
 	switch ($prev_color['color']) {
 		case 0:
-			$r = $set_grad;
+			$g = $set_grad;
 			break;
 		case 1:
-			$g = $set_grad;
+			$r = $set_grad;
 			break;
 		case 2:
 			$b = $set_grad;
@@ -556,65 +536,6 @@ function get_next_palette($palette = 0, $palettetype = 0) {
 	return $result;
 }
 
-function imageDiagonalMarks($im,$x, $y, $offset, $color) {
-	global $colors;
-
-	$gims = array(
-		'lt' => array(0, 0, -9, 0, -9, -3, -3, -9, 0, -9),
-		'rt' => array(0, 0, 9, 0, 9, -3, 3,-9, 0, -9),
-		'lb' => array(0, 0, -9, 0, -9, 3, -3, 9, 0, 9),
-		'rb' => array(0, 0, 9, 0, 9, 3, 3, 9, 0, 9)
-	);
-
-	foreach ($gims['lt'] as $num => $px) {
-		if (($num % 2) == 0) {
-			$gims['lt'][$num] = $px + $x - $offset;
-		}
-		else {
-			$gims['lt'][$num] = $px + $y - $offset;
-		}
-	}
-
-	foreach ($gims['rt'] as $num => $px) {
-		if (($num % 2) == 0) {
-			$gims['rt'][$num] = $px + $x + $offset;
-		}
-		else {
-			$gims['rt'][$num] = $px + $y - $offset;
-		}
-	}
-
-	foreach ($gims['lb'] as $num => $px) {
-		if (($num % 2) == 0) {
-			$gims['lb'][$num] = $px + $x - $offset;
-		}
-		else {
-			$gims['lb'][$num] = $px + $y + $offset;
-		}
-	}
-
-	foreach ($gims['rb'] as $num => $px) {
-		if (($num % 2) == 0) {
-			$gims['rb'][$num] = $px + $x + $offset;
-		}
-		else {
-			$gims['rb'][$num] = $px + $y + $offset;
-		}
-	}
-
-	imagefilledpolygon($im, $gims['lt'], 5, $color);
-	imagepolygon($im, $gims['lt'], 5, $colors['Dark Red']);
-
-	imagefilledpolygon($im, $gims['rt'], 5, $color);
-	imagepolygon($im, $gims['rt'], 5, $colors['Dark Red']);
-
-	imagefilledpolygon($im, $gims['lb'], 5, $color);
-	imagepolygon($im, $gims['lb'], 5, $colors['Dark Red']);
-
-	imagefilledpolygon($im, $gims['rb'], 5, $color);
-	imagepolygon($im, $gims['rb'], 5, $colors['Dark Red']);
-}
-
 /**
  * Draw trigger recent change markers.
  *
@@ -690,64 +611,72 @@ function imageVerticalMarks($im, $x, $y, $offset, $color, $marks) {
 	}
 }
 
+/**
+ * Draws a text on an image. Supports TrueType fonts.
+ *
+ * @param resource 	$image
+ * @param int		$fontsize
+ * @param int 		$angle
+ * @param int		$x
+ * @param int 		$y
+ * @param int		$color		a numeric color identifier from imagecolorallocate() or imagecolorallocatealpha()
+ * @param string	$string
+ */
 function imageText($image, $fontsize, $angle, $x, $y, $color, $string) {
-	$gdinfo = gd_info();
-
-	if ($gdinfo['FreeType Support'] && function_exists('imagettftext')) {
-		if ((preg_match(ZBX_PREG_DEF_FONT_STRING, $string) && $angle != 0) || ZBX_FONT_NAME == ZBX_GRAPH_FONT_NAME) {
-			$ttf = ZBX_FONTPATH.'/'.ZBX_FONT_NAME.'.ttf';
-			imagettftext($image, $fontsize, $angle, $x, $y, $color, $ttf, $string);
-		}
-		elseif ($angle == 0) {
-			$ttf = ZBX_FONTPATH.'/'.ZBX_GRAPH_FONT_NAME.'.ttf';
-			imagettftext($image, $fontsize, $angle, $x, $y, $color, $ttf, $string);
-		}
-		else {
-			$ttf = ZBX_FONTPATH.'/'.ZBX_GRAPH_FONT_NAME.'.ttf';
-			$size = imageTextSize($fontsize, 0, $string);
-
-			$imgg = imagecreatetruecolor($size['width'] + 1, $size['height']);
-			$transparentColor = imagecolorallocatealpha($imgg, 200, 200, 200, 127);
-			imagefill($imgg, 0, 0, $transparentColor);
-			imagettftext($imgg, $fontsize, 0, 0, $size['height'], $color, $ttf, $string);
-
-			$imgg = imagerotate($imgg, $angle, $transparentColor);
-			ImageAlphaBlending($imgg, false);
-			imageSaveAlpha($imgg, true);
-			imagecopy($image, $imgg, $x - $size['height'], $y - $size['width'], 0, 0, $size['height'], $size['width'] + 1);
-			imagedestroy($imgg);
-		}
+	if ((preg_match(ZBX_PREG_DEF_FONT_STRING, $string) && $angle != 0) || ZBX_FONT_NAME == ZBX_GRAPH_FONT_NAME) {
+		$ttf = ZBX_FONTPATH.'/'.ZBX_FONT_NAME.'.ttf';
+		imagettftext($image, $fontsize, $angle, $x, $y, $color, $ttf, $string);
+	}
+	elseif ($angle == 0) {
+		$ttf = ZBX_FONTPATH.'/'.ZBX_GRAPH_FONT_NAME.'.ttf';
+		imagettftext($image, $fontsize, $angle, $x, $y, $color, $ttf, $string);
 	}
 	else {
-		show_error_message(_('PHP gd FreeType support missing'));
+		$ttf = ZBX_FONTPATH.'/'.ZBX_GRAPH_FONT_NAME.'.ttf';
+		$size = imageTextSize($fontsize, 0, $string);
+
+		$imgg = imagecreatetruecolor($size['width'] + 1, $size['height']);
+		$transparentColor = imagecolorallocatealpha($imgg, 200, 200, 200, 127);
+		imagefill($imgg, 0, 0, $transparentColor);
+		imagettftext($imgg, $fontsize, 0, 0, $size['height'], $color, $ttf, $string);
+
+		$imgg = imagerotate($imgg, $angle, $transparentColor);
+		imagealphablending($imgg, false);
+		imagesavealpha($imgg, true);
+		imagecopy($image, $imgg, $x - $size['height'], $y - $size['width'], 0, 0, $size['height'], $size['width'] + 1);
+		imagedestroy($imgg);
 	}
 }
 
+/**
+ * Calculates the size of the given string.
+ *
+ * Returns the following data:
+ * - height 	- height of the text;
+ * - width		- width of the text;
+ * - baseline	- baseline Y coordinate (can only be used for horizontal text, can be negative).
+ *
+ * @param int 		$fontsize
+ * @param int 		$angle
+ * @param string 	$string
+ *
+ * @return array
+ */
 function imageTextSize($fontsize, $angle, $string) {
-	$gdinfo = gd_info();
-
-	$result = array();
-
-	if ($gdinfo['FreeType Support'] && function_exists('imagettfbbox')) {
-		if (preg_match(ZBX_PREG_DEF_FONT_STRING, $string) && $angle != 0) {
-			$ttf = ZBX_FONTPATH.'/'.ZBX_FONT_NAME.'.ttf';
-		}
-		else {
-			$ttf = ZBX_FONTPATH.'/'.ZBX_GRAPH_FONT_NAME.'.ttf';
-		}
-
-		$ar = imagettfbbox($fontsize, $angle, $ttf, $string);
-
-		$result['height'] = abs($ar[1] - $ar[5]);
-		$result['width'] = abs($ar[0] - $ar[4]);
-		$result['baseline'] = $ar[1];
+	if (preg_match(ZBX_PREG_DEF_FONT_STRING, $string) && $angle != 0) {
+		$ttf = ZBX_FONTPATH.'/'.ZBX_FONT_NAME.'.ttf';
 	}
 	else {
-		show_error_message(_('PHP gd FreeType support missing'));
-		return false;
+		$ttf = ZBX_FONTPATH.'/'.ZBX_GRAPH_FONT_NAME.'.ttf';
 	}
 
-	return $result;
+	$ar = imagettfbbox($fontsize, $angle, $ttf, $string);
+
+	return array(
+		'height' => abs($ar[1] - $ar[5]),
+		'width' => abs($ar[0] - $ar[4]),
+		'baseline' => $ar[1]
+	);
 }
 
 function dashedLine($image, $x1, $y1, $x2, $y2, $color) {

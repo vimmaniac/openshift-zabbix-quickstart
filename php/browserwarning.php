@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@
 require_once dirname(__FILE__).'/include/gettextwrapper.inc.php';
 require_once dirname(__FILE__).'/include/func.inc.php';
 require_once dirname(__FILE__).'/include/defines.inc.php';
-require_once dirname(__FILE__).'/include/classes/class.cview.php';
+require_once dirname(__FILE__).'/include/classes/core/CView.php';
 
 $browserWarningForm = new CView('general.browserwarning');
 $browserWarningForm->render();

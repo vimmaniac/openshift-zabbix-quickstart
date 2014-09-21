@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -45,9 +45,8 @@ else {
 // create form
 $triggersForm = new CForm();
 $triggersForm->setName('triggersForm');
-$triggersForm->addVar('massupdate', $this->data['massupdate']);
 $triggersForm->addVar('hostid', $this->data['hostid']);
-$triggersForm->addVar('go', $this->data['go']);
+$triggersForm->addVar('action', $this->data['action']);
 if ($this->data['parent_discoveryid']) {
 	$triggersForm->addVar('parent_discoveryid', $this->data['parent_discoveryid']);
 }
@@ -92,15 +91,29 @@ if (empty($this->data['parent_discoveryid'])) {
 	foreach ($this->data['dependencies'] as $dependency) {
 		$triggersForm->addVar('dependencies[]', $dependency['triggerid'], 'dependencies_'.$dependency['triggerid']);
 
-		$row = new CRow(array(
-			$dependency['host'].NAME_DELIMITER.$dependency['description'],
-			new CButton(
-				'remove',
-				_('Remove'),
-				'javascript: removeDependency(\''.$dependency['triggerid'].'\');',
-				'link_menu'
-			)
-		));
+		$hostNames = array();
+		foreach ($dependency['hosts'] as $host) {
+			$hostNames[] = CHtml::encode($host['name']);
+			$hostNames[] = ', ';
+		}
+		array_pop($hostNames);
+
+		if ($dependency['flags'] == ZBX_FLAG_DISCOVERY_NORMAL) {
+			$description = new CLink(
+				array($hostNames, NAME_DELIMITER, CHtml::encode($dependency['description'])),
+				'triggers.php?form=update&hostid='.$dependency['hostid'].'&triggerid='.$dependency['triggerid']
+			);
+			$description->setAttribute('target', '_blank');
+		}
+		else {
+			$description = array($hostNames, NAME_DELIMITER, $dependency['description']);
+		}
+
+		$row = new CRow(array($description, new CButton('remove', _('Remove'),
+			'javascript: removeDependency(\''.$dependency['triggerid'].'\');',
+			'link_menu'
+		)));
+
 		$row->setAttribute('id', 'dependency_'.$dependency['triggerid']);
 		$dependenciesTable->addRow($row);
 	}
@@ -113,12 +126,11 @@ if (empty($this->data['parent_discoveryid'])) {
 					'dstfrm=massupdate'.
 					'&dstact=add_dependency'.
 					'&reference=deptrigger'.
-					'&dstfld1=new_dependency[]'.
+					'&dstfld1=new_dependency'.
 					'&srctbl=triggers'.
 					'&objname=triggers'.
 					'&srcfld1=triggerid'.
 					'&multiselect=1'.
-					'&monitored_hosts=1'.
 					'&with_triggers=1", 1000, 700);',
 				'link_menu'
 			)
@@ -149,7 +161,7 @@ $triggersForm->addItem($triggersTab);
 
 // append buttons to form
 $triggersForm->addItem(makeFormFooter(
-	new CSubmit('mass_save', _('Save')),
+	new CSubmit('massupdate', _('Update')),
 	new CButtonCancel(url_params(array('groupid', 'hostid', 'parent_discoveryid')))
 ));
 

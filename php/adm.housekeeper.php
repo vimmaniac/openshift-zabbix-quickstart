@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -30,40 +30,40 @@ require_once dirname(__FILE__).'/include/page_header.php';
 // VAR	TYPE	OPTIONAL	FLAGS	VALIDATION	EXCEPTION
 $fields = array(
 	'hk_events_mode' =>		array(T_ZBX_INT, O_OPT, null, IN('0,1'), null),
-	'hk_events_trigger' => 	array(T_ZBX_DBL, O_OPT, null, BETWEEN(1, 99999), null,
+	'hk_events_trigger' => 	array(T_ZBX_INT, O_OPT, null, BETWEEN(1, 99999), null,
 		_('Trigger event and alert data storage period')
 	),
-	'hk_events_internal' => array(T_ZBX_DBL, O_OPT, null, BETWEEN(1, 99999), null,
+	'hk_events_internal' => array(T_ZBX_INT, O_OPT, null, BETWEEN(1, 99999), null,
 		_('Internal event and alert data storage period')
 	),
-	'hk_events_discovery' =>array(T_ZBX_DBL, O_OPT, null, BETWEEN(1, 99999), null,
+	'hk_events_discovery' =>array(T_ZBX_INT, O_OPT, null, BETWEEN(1, 99999), null,
 		_('Network discovery event and alert data storage period')
 	),
-	'hk_events_autoreg' => 	array(T_ZBX_DBL, O_OPT, null, BETWEEN(1, 99999), null,
+	'hk_events_autoreg' => 	array(T_ZBX_INT, O_OPT, null, BETWEEN(1, 99999), null,
 		_('Auto-registration event and alert data storage period')
 	),
 	'hk_services_mode' =>	array(T_ZBX_INT, O_OPT, null, IN('0,1'), null),
-	'hk_services' => 		array(T_ZBX_DBL, O_OPT, null, BETWEEN(1, 99999), null,
+	'hk_services' => 		array(T_ZBX_INT, O_OPT, null, BETWEEN(1, 99999), null,
 		_('IT service data storage period')
 	),
 	'hk_audit_mode' =>		array(T_ZBX_INT, O_OPT, null, IN('0,1'), null),
-	'hk_audit' => 			array(T_ZBX_DBL, O_OPT, null, BETWEEN(1, 99999), null,
+	'hk_audit' => 			array(T_ZBX_INT, O_OPT, null, BETWEEN(1, 99999), null,
 		_('Audit data storage period')
 	),
 	'hk_sessions_mode' =>	array(T_ZBX_INT, O_OPT, null, IN('0,1'), null),
-	'hk_sessions' => 		array(T_ZBX_DBL, O_OPT, null, BETWEEN(1, 99999), null,
+	'hk_sessions' => 		array(T_ZBX_INT, O_OPT, null, BETWEEN(1, 99999), null,
 		_('User session data storage period')),
 	'hk_history_mode' =>	array(T_ZBX_INT, O_OPT, null, IN('0,1'), null),
 	'hk_history_global' =>	array(T_ZBX_INT, O_OPT, null, IN('0,1'), null),
-	'hk_history' => 		array(T_ZBX_DBL, O_OPT, null, BETWEEN(0, 99999), null,
+	'hk_history' => 		array(T_ZBX_INT, O_OPT, null, BETWEEN(0, 99999), null,
 		_('History data storage period')
 	),
 	'hk_trends_mode' =>		array(T_ZBX_INT, O_OPT, null, IN('0,1'), null),
 	'hk_trends_global' =>	array(T_ZBX_INT, O_OPT, null, IN('0,1'), null),
-	'hk_trends' => 			array(T_ZBX_DBL, O_OPT, null, BETWEEN(0, 99999), null,
+	'hk_trends' => 			array(T_ZBX_INT, O_OPT, null, BETWEEN(0, 99999), null,
 		_('Trend data storage period')
 	),
-	'save' =>				array(T_ZBX_STR, O_OPT,	P_SYS|P_ACT, null, null),
+	'update' =>				array(T_ZBX_STR, O_OPT,	P_SYS|P_ACT, null, null),
 	'form_refresh' =>		array(T_ZBX_INT, O_OPT,	null, null, null)
 );
 check_fields($fields);
@@ -73,7 +73,7 @@ $data['config'] = select_config();
 /*
  * Actions
  */
-if (isset($_REQUEST['save'])) {
+if (hasRequest('update')) {
 	DBstart();
 
 	$configs = array(
@@ -140,35 +140,24 @@ $form->addItem($cmbConf);
 $cnf_wdgt = new CWidget(null, 'hk');
 $cnf_wdgt->addPageHeader(_('CONFIGURATION OF HOUSEKEEPING'), $form);
 
-$data['form_refresh'] = getRequest('form_refresh', 0);
-
-if ($data['form_refresh']) {
+if (hasRequest('form_refresh')) {
 	$data['config']['hk_events_mode'] = getRequest('hk_events_mode');
-	$data['config']['hk_events_trigger'] = isset($_REQUEST['hk_events_trigger'])
-		? getRequest('hk_events_trigger') : $data['config']['hk_events_trigger'];
-	$data['config']['hk_events_internal'] = isset($_REQUEST['hk_events_internal'])
-		? getRequest('hk_events_internal') : $data['config']['hk_events_internal'];
-	$data['config']['hk_events_discovery'] = isset($_REQUEST['hk_events_discovery'])
-		? getRequest('hk_events_discovery') : $data['config']['hk_events_discovery'];
-	$data['config']['hk_events_autoreg'] = isset($_REQUEST['hk_events_autoreg'])
-		? getRequest('hk_events_autoreg') : $data['config']['hk_events_autoreg'];
+	$data['config']['hk_events_trigger'] = getRequest('hk_events_trigger', $data['config']['hk_events_trigger']);
+	$data['config']['hk_events_internal'] = getRequest('hk_events_internal', $data['config']['hk_events_internal']);
+	$data['config']['hk_events_discovery'] = getRequest('hk_events_discovery', $data['config']['hk_events_discovery']);
+	$data['config']['hk_events_autoreg'] = getRequest('hk_events_autoreg', $data['config']['hk_events_autoreg']);
 	$data['config']['hk_services_mode'] = getRequest('hk_services_mode');
-	$data['config']['hk_services'] = isset($_REQUEST['hk_services'])
-		? getRequest('hk_services') : $data['config']['hk_services'];
+	$data['config']['hk_services'] = getRequest('hk_services', $data['config']['hk_services']);
 	$data['config']['hk_audit_mode'] = getRequest('hk_audit_mode');
-	$data['config']['hk_audit'] = isset($_REQUEST['hk_audit'])
-		? getRequest('hk_audit') : $data['config']['hk_audit'];
+	$data['config']['hk_audit'] = getRequest('hk_audit', $data['config']['hk_audit']);
 	$data['config']['hk_sessions_mode'] = getRequest('hk_sessions_mode');
-	$data['config']['hk_sessions'] = isset($_REQUEST['hk_sessions'])
-		? getRequest('hk_sessions') : $data['config']['hk_sessions'];
+	$data['config']['hk_sessions'] = getRequest('hk_sessions', $data['config']['hk_sessions']);
 	$data['config']['hk_history_mode'] = getRequest('hk_history_mode');
 	$data['config']['hk_history_global'] = getRequest('hk_history_global');
-	$data['config']['hk_history'] = isset($_REQUEST['hk_history'])
-		? getRequest('hk_history') : $data['config']['hk_history'];
+	$data['config']['hk_history'] = getRequest('hk_history', $data['config']['hk_history']);
 	$data['config']['hk_trends_mode'] = getRequest('hk_trends_mode');
 	$data['config']['hk_trends_global'] = getRequest('hk_trends_global');
-	$data['config']['hk_trends'] = isset($_REQUEST['hk_trends'])
-		? getRequest('hk_trends') : $data['config']['hk_trends'];
+	$data['config']['hk_trends'] = getRequest('hk_trends', $data['config']['hk_trends']);
 }
 else {
 	$data['config'] = select_config(false);

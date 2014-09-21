@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -233,6 +233,42 @@ function itemIndicatorStyle($status, $state = null) {
 }
 
 /**
+ * Orders items by both status and state. Items are sorted in the following order: enabled, disabled, not supported.
+ *
+ * Keep in sync with orderTriggersByStatus().
+ *
+ * @param array  $items
+ * @param string $sortorder
+ */
+function orderItemsByStatus(array &$items, $sortorder = ZBX_SORT_UP) {
+	$sort = array();
+
+	foreach ($items as $key => $item) {
+		if ($item['status'] == ITEM_STATUS_ACTIVE) {
+			$statusOrder = ($item['state'] == ITEM_STATE_NOTSUPPORTED) ? 2 : 0;
+		}
+		elseif ($item['status'] == ITEM_STATUS_DISABLED) {
+			$statusOrder = 1;
+		}
+
+		$sort[$key] = $statusOrder;
+	}
+
+	if ($sortorder == ZBX_SORT_UP) {
+		asort($sort);
+	}
+	else {
+		arsort($sort);
+	}
+
+	$sortedItems = array();
+	foreach ($sort as $key => $val) {
+		$sortedItems[$key] = $items[$key];
+	}
+	$items = $sortedItems;
+}
+
+/**
  * Returns the name of the given interface type. Items "status" and "state" properties must be defined.
  *
  * @param int $type
@@ -304,11 +340,11 @@ function copyItemsToHosts($srcItemIds, $dstHostIds) {
 			'trapper_hosts', 'units', 'multiplier', 'delta', 'snmpv3_contextname', 'snmpv3_securityname',
 			'snmpv3_securitylevel', 'snmpv3_authprotocol', 'snmpv3_authpassphrase', 'snmpv3_privprotocol',
 			'snmpv3_privpassphrase', 'formula', 'logtimefmt', 'valuemapid', 'delay_flex', 'params', 'ipmi_sensor',
-			'data_type', 'authtype', 'username', 'password', 'publickey', 'privatekey', 'flags', 'filter', 'port',
+			'data_type', 'authtype', 'username', 'password', 'publickey', 'privatekey', 'flags', 'port',
 			'description', 'inventory_link'
 		),
 		'filter' => array('flags' => ZBX_FLAG_DISCOVERY_NORMAL),
-		'selectApplications' => API_OUTPUT_REFER
+		'selectApplications' => array('applicationid')
 	));
 
 	$dstHosts = API::Host()->get(array(
@@ -366,12 +402,12 @@ function copyItems($srcHostId, $dstHostId) {
 			'trapper_hosts', 'units', 'multiplier', 'delta', 'snmpv3_contextname', 'snmpv3_securityname',
 			'snmpv3_securitylevel', 'snmpv3_authprotocol', 'snmpv3_authpassphrase', 'snmpv3_privprotocol',
 			'snmpv3_privpassphrase', 'formula', 'logtimefmt', 'valuemapid', 'delay_flex', 'params', 'ipmi_sensor',
-			'data_type', 'authtype', 'username', 'password', 'publickey', 'privatekey', 'flags', 'filter', 'port',
+			'data_type', 'authtype', 'username', 'password', 'publickey', 'privatekey', 'flags', 'port',
 			'description', 'inventory_link'
 		),
 		'inherited' => false,
 		'filter' => array('flags' => ZBX_FLAG_DISCOVERY_NORMAL),
-		'selectApplications' => API_OUTPUT_REFER
+		'selectApplications' => array('applicationid')
 	));
 	$dstHosts = API::Host()->get(array(
 		'output' => array('hostid', 'host', 'status'),
@@ -451,11 +487,6 @@ function disable_item($itemids) {
 	return update_item_status($itemids, ITEM_STATUS_DISABLED);
 }
 
-function get_items_by_hostid($hostids) {
-	zbx_value2array($hostids);
-	return DBselect('SELECT i.* FROM items i WHERE '.dbConditionInt('i.hostid', $hostids));
-}
-
 function get_item_by_key($key, $host = '') {
 	$item = false;
 	$sql_from = '';
@@ -490,7 +521,7 @@ function get_item_by_itemid_limited($itemid) {
 			'i.delta,i.snmpv3_contextname,i.snmpv3_securityname,i.snmpv3_securitylevel,i.snmpv3_authprotocol,'.
 			'i.snmpv3_authpassphrase,i.snmpv3_privprotocol,i.snmpv3_privpassphrase,i.formula,i.trends,i.logtimefmt,'.
 			'i.valuemapid,i.delay_flex,i.params,i.ipmi_sensor,i.templateid,i.authtype,i.username,i.password,'.
-			'i.publickey,i.privatekey,i.flags,i.filter,i.description,i.inventory_link'.
+			'i.publickey,i.privatekey,i.flags,i.description,i.inventory_link'.
 		' FROM items i'.
 		' WHERE i.itemid='.zbx_dbstr($itemid)));
 	if ($row) {
@@ -549,133 +580,6 @@ function get_same_item_for_host($item, $dest_hostids) {
 	return false;
 }
 
-/**
- * Resolve macros in item key.
- * Resolve {HOSTNAME}, {IPADDRESS}, {HOST.IP}, {HOST.DNS}, {HOST.CONN}, {HOST.HOST}, {HOST.NAME} and user macros.
- * Macros related to interface resolved only for host items.
- *
- * @param array $item
- * @param string $item['key_']
- * @param string $item['itemid']
- *
- * @return string
- */
-function resolveItemKeyMacros(array $item) {
-	$key =& $item['key_'];
-	$macStack = array();
-	$macros = array('{HOSTNAME}', '{IPADDRESS}', '{HOST.IP}', '{HOST.DNS}', '{HOST.CONN}', '{HOST.HOST}', '{HOST.NAME}');
-
-	foreach ($macros as $macro) {
-		if (zbx_strpos($key, $macro) !== false) {
-			$macStack[] = $macro;
-		}
-	}
-
-	if (!empty($macStack)) {
-		$dbItem = API::Item()->get(array(
-			'itemids' => $item['itemid'],
-			'selectInterfaces' => array('ip', 'dns', 'useip'),
-			'selectHosts' => array('host', 'name'),
-			'webitems' => true,
-			'output' => array('itemid'),
-			'filter' => array('flags' => null)
-		));
-
-		if (!empty($dbItem)) {
-			$dbItem = reset($dbItem);
-			$host = reset($dbItem['hosts']);
-			$interface = reset($dbItem['interfaces']);
-
-			// if item without interface or template item, resolve interface related macros to *UNKNOWN*
-			if (!$interface) {
-				$interface = array(
-					'ip' => UNRESOLVED_MACRO_STRING,
-					'dns' => UNRESOLVED_MACRO_STRING,
-					'useip' => false
-				);
-			}
-
-			foreach ($macStack as $macro) {
-				switch ($macro) {
-					case '{HOST.NAME}':
-						$key = str_replace('{HOST.NAME}', $host['name'], $key);
-						break;
-					case '{HOSTNAME}': // deprecated
-						$key = str_replace('{HOSTNAME}', $host['host'], $key);
-						break;
-					case '{HOST.HOST}':
-						$key = str_replace('{HOST.HOST}', $host['host'], $key);
-						break;
-					case '{HOST.IP}':
-						$key = str_replace('{HOST.IP}', $interface['ip'], $key);
-						break;
-					case '{IPADDRESS}': // deprecated
-						$key = str_replace('{IPADDRESS}', $interface['ip'], $key);
-						break;
-					case '{HOST.DNS}':
-						$key = str_replace('{HOST.DNS}', $interface['dns'], $key);
-						break;
-					case '{HOST.CONN}':
-						$key = str_replace('{HOST.CONN}', $interface['useip'] ? $interface['ip'] : $interface['dns'], $key);
-						break;
-				}
-			}
-		}
-	}
-
-	if (preg_match('/'.ZBX_PREG_EXPRESSION_USER_MACROS.'/', $key)) {
-		$item = API::UserMacro()->resolveItem($item);
-	}
-
-	return $item['key_'];
-}
-
-/**
- * Expand macros inside key name and return it
- * Example:
- *	key: 'test.key[a, b, "{HOSTNAME}"]'
- *	name: 'Test item $1, $2, $3'
- *	result: 'Test item a, b, Zabbix-server'
- *
- * @param array $item
- * @param string $item['key_']
- * @param string $item['itemid']
- * @param string $item['name']
- *
- * @return string
- */
-function itemName($item) {
-	$name = $item['name'];
-
-	// if item name contains $1..$9 macros, we need to expand them
-	if (preg_match('/\$[1-9]/', $name)) {
-		$key = resolveItemKeyMacros($item);
-
-		// parsing key to get the parameters out of it
-		$ItemKey = new CItemKey($key);
-		if ($ItemKey->isValid()) {
-			$keyParameters = $ItemKey->getParameters();
-			$searchOffset = 0;
-			while (preg_match('/\$[1-9]/', $name, $matches, PREG_OFFSET_CAPTURE, $searchOffset)) {
-				// matches[0][0] - matched param, [1] - second character of it
-				$paramNumber = $matches[0][0][1] - 1;
-				$replaceString = isset($keyParameters[$paramNumber]) ? $keyParameters[$paramNumber] : '';
-
-				$name = substr_replace($name, $replaceString, $matches[0][1], 2);
-				$searchOffset = $matches[0][1] + strlen($replaceString);
-			}
-		}
-	}
-	if (preg_match_all('/'.ZBX_PREG_EXPRESSION_USER_MACROS.'/', $name, $arr)) {
-		$macros = API::UserMacro()->getMacros(array(
-			'macros' => $arr[1],
-			'itemid' => $item['itemid']
-		));
-		$name = str_replace(array_keys($macros), array_values($macros), $name);
-	}
-	return $name;
-}
-
 function get_realhost_by_itemid($itemid) {
 	$item = get_item_by_itemid($itemid);
 	if ($item['templateid'] <> 0) {
@@ -714,19 +618,19 @@ function get_realrule_by_itemid_and_hostid($itemid, $hostid) {
 /**
  * Retrieve overview table object for items.
  *
- * @param array  $hostIds
- * @param string $application name of application to filter
- * @param int    $viewMode
+ * @param array  		$hostIds
+ * @param array|null	$applicationIds		IDs of applications to filter items by
+ * @param int    		$viewMode
  *
  * @return CTableInfo
  */
-function getItemsDataOverview($hostIds, $application, $viewMode) {
+function getItemsDataOverview($hostIds, array $applicationIds = null, $viewMode) {
 	$sqlFrom = '';
 	$sqlWhere = '';
 
-	if ($application !== '') {
-		$sqlFrom = 'applications a,items_applications ia,';
-		$sqlWhere = ' AND i.itemid=ia.itemid AND a.applicationid=ia.applicationid AND a.name='.zbx_dbstr($application);
+	if ($applicationIds !== null) {
+		$sqlFrom = 'items_applications ia,';
+		$sqlWhere = ' AND i.itemid=ia.itemid AND '.dbConditionInt('ia.applicationid', $applicationIds);
 	}
 
 	$dbItems = DBfetchArray(DBselect(
@@ -743,13 +647,15 @@ function getItemsDataOverview($hostIds, $application, $viewMode) {
 				$sqlWhere
 	));
 
+	$dbItems = CMacrosResolverHelper::resolveItemNames($dbItems);
+
 	CArrayHelper::sort($dbItems, array(
-		array('field' => 'name', 'order' => ZBX_SORT_UP),
+		array('field' => 'name_expanded', 'order' => ZBX_SORT_UP),
 		array('field' => 'itemid', 'order' => ZBX_SORT_UP)
 	));
 
 	// fetch latest values
-	$history = Manager::History()->getLast(zbx_toHash($dbItems, 'itemid'));
+	$history = Manager::History()->getLast(zbx_toHash($dbItems, 'itemid'), 1, ZBX_HISTORY_PERIOD);
 
 	// fetch data for the host JS menu
 	$hosts = API::Host()->get(array(
@@ -758,32 +664,32 @@ function getItemsDataOverview($hostIds, $application, $viewMode) {
 		'hostids' => $hostIds,
 		'with_monitored_items' => true,
 		'preservekeys' => true,
+		'selectGraphs' => API_OUTPUT_COUNT,
 		'selectScreens' => ($viewMode == STYLE_LEFT) ? API_OUTPUT_COUNT : null
 	));
 
 	$items = array();
-	foreach ($dbItems as $row) {
-		$descr = itemName($row);
-		$row['hostname'] = get_node_name_by_elid($row['hostid'], null, NAME_DELIMITER).$row['hostname'];
-		$hostNames[$row['hostid']] = $row['hostname'];
+	foreach ($dbItems as $dbItem) {
+		$name = $dbItem['name_expanded'];
+
+		$hostNames[$dbItem['hostid']] = $dbItem['hostname'];
 
 		// a little tricky check for attempt to overwrite active trigger (value=1) with
 		// inactive or active trigger with lower priority.
-		if (!isset($items[$descr][$row['hostname']])
-				|| (($items[$descr][$row['hostname']]['tr_value'] == TRIGGER_VALUE_FALSE && $row['tr_value'] == TRIGGER_VALUE_TRUE)
-					|| (($items[$descr][$row['hostname']]['tr_value'] == TRIGGER_VALUE_FALSE || $row['tr_value'] == TRIGGER_VALUE_TRUE)
-						&& $row['priority'] > $items[$descr][$row['hostname']]['severity']))) {
-
-			$items[$descr][$row['hostname']] = array(
-				'itemid' => $row['itemid'],
-				'value_type' => $row['value_type'],
-				'value' => isset($history[$row['itemid']]) ? $history[$row['itemid']][0]['value'] : null,
-				'units' => $row['units'],
-				'name' => $row['name'],
-				'valuemapid' => $row['valuemapid'],
-				'severity' => $row['priority'],
-				'tr_value' => $row['tr_value'],
-				'triggerid' => $row['triggerid']
+		if (!isset($items[$name][$dbItem['hostname']])
+				|| (($items[$name][$dbItem['hostname']]['tr_value'] == TRIGGER_VALUE_FALSE && $dbItem['tr_value'] == TRIGGER_VALUE_TRUE)
+					|| (($items[$name][$dbItem['hostname']]['tr_value'] == TRIGGER_VALUE_FALSE || $dbItem['tr_value'] == TRIGGER_VALUE_TRUE)
+						&& $dbItem['priority'] > $items[$name][$dbItem['hostname']]['severity']))) {
+			$items[$name][$dbItem['hostname']] = array(
+				'itemid' => $dbItem['itemid'],
+				'value_type' => $dbItem['value_type'],
+				'value' => isset($history[$dbItem['itemid']]) ? $history[$dbItem['itemid']][0]['value'] : null,
+				'units' => $dbItem['units'],
+				'name' => $name,
+				'valuemapid' => $dbItem['valuemapid'],
+				'severity' => $dbItem['priority'],
+				'tr_value' => $dbItem['tr_value'],
+				'triggerid' => $dbItem['triggerid']
 			);
 		}
 	}
@@ -824,7 +730,7 @@ function getItemsDataOverview($hostIds, $application, $viewMode) {
 			$host = $hosts[$hostId];
 
 			$name = new CSpan($host['name'], 'link_menu');
-			$name->setMenuPopup(getMenuPopupHost($host, $scripts[$hostId]));
+			$name->setMenuPopup(CMenuPopupHelper::getHost($host, $scripts[$hostId]));
 
 			$tableRow = array(new CCol($name));
 			foreach ($items as $ithosts) {
@@ -863,7 +769,7 @@ function getItemDataOverviewCells($tableRow, $ithosts, $hostName) {
 	$column = new CCol(array($value, $ack), $css);
 
 	if (isset($ithosts[$hostName])) {
-		$column->setMenuPopup(getMenuPopupHistory($item));
+		$column->setMenuPopup(CMenuPopupHelper::getHistory($item));
 	}
 
 	$tableRow[] = $column;
@@ -871,25 +777,33 @@ function getItemDataOverviewCells($tableRow, $ithosts, $hostName) {
 	return $tableRow;
 }
 
-/******************************************************************************
- *                                                                            *
- * Comments: !!! Don't forget sync code with C !!!                            *
- *                                                                            *
- ******************************************************************************/
-function get_same_applications_for_host($applications, $hostid) {
-	$child_applications = array();
-	$db_apps = DBselect(
-		'SELECT a1.applicationid'.
+/**
+ * Get same application IDs on destination host and return array with keys as source application IDs
+ * and values as destination application IDs.
+ *
+ * Comments: !!! Don't forget sync code with C !!!
+ *
+ * @param array  $applicationIds
+ * @param string $hostId
+ *
+ * @return array
+ */
+function get_same_applications_for_host(array $applicationIds, $hostId) {
+	$applications = array();
+
+	$dbApplications = DBselect(
+		'SELECT a1.applicationid AS dstappid,a2.applicationid AS srcappid'.
 		' FROM applications a1,applications a2'.
 		' WHERE a1.name=a2.name'.
-			' AND a1.hostid='.zbx_dbstr($hostid).
-			' AND '.dbConditionInt('a2.applicationid', $applications)
+			' AND a1.hostid='.zbx_dbstr($hostId).
+			' AND '.dbConditionInt('a2.applicationid', $applicationIds)
 	);
-	while ($app = DBfetch($db_apps)) {
-		$child_applications[] = $app['applicationid'];
+
+	while ($dbApplication = DBfetch($dbApplications)) {
+		$applications[$dbApplication['srcappid']] = $dbApplication['dstappid'];
 	}
 
-	return $child_applications;
+	return $applications;
 }
 
 /******************************************************************************
@@ -927,13 +841,13 @@ function delete_history_by_itemid($itemIds) {
 		return $result;
 	}
 
-	DBexecute('DELETE FROM history_text WHERE '.dbConditionInt('itemid', $itemIds));
-	DBexecute('DELETE FROM history_log WHERE '.dbConditionInt('itemid', $itemIds));
-	DBexecute('DELETE FROM history_uint WHERE '.dbConditionInt('itemid', $itemIds));
-	DBexecute('DELETE FROM history_str WHERE '.dbConditionInt('itemid', $itemIds));
-	DBexecute('DELETE FROM history WHERE '.dbConditionInt('itemid', $itemIds));
+	$result &= DBexecute('DELETE FROM history_text WHERE '.dbConditionInt('itemid', $itemIds));
+	$result &= DBexecute('DELETE FROM history_log WHERE '.dbConditionInt('itemid', $itemIds));
+	$result &= DBexecute('DELETE FROM history_uint WHERE '.dbConditionInt('itemid', $itemIds));
+	$result &= DBexecute('DELETE FROM history_str WHERE '.dbConditionInt('itemid', $itemIds));
+	$result &= DBexecute('DELETE FROM history WHERE '.dbConditionInt('itemid', $itemIds));
 
-	return true;
+	return (bool) $result;
 }
 
 /**
@@ -989,8 +903,8 @@ function formatHistoryValue($value, array $item, $trim = true) {
 		// break; is not missing here
 		case ITEM_VALUE_TYPE_TEXT:
 		case ITEM_VALUE_TYPE_LOG:
-			if ($trim && zbx_strlen($value) > 20) {
-				$value = zbx_substr($value, 0, 20).'...';
+			if ($trim && mb_strlen($value) > 20) {
+				$value = mb_substr($value, 0, 20).'...';
 			}
 
 			if ($mapping !== false) {
@@ -1006,20 +920,26 @@ function formatHistoryValue($value, array $item, $trim = true) {
 
 /**
  * Retrieves from DB historical data for items and applies functional calculations.
- * If fore some reasons fails, returns UNRESOLVED_MACRO_STRING.
+ * If fails for some reason, returns UNRESOLVED_MACRO_STRING.
  *
- * @param type $item
- * @param type $item['value_type'] type of item, allowed: ITEM_VALUE_TYPE_FLOAT and ITEM_VALUE_TYPE_UINT64
- * @param type $item['itemid'] id of item
- * @param type $item['units'] units of item
- * @param type $function function to apply to time period from param, allowed: min, max and avg
- * @param type $param formatted parameter for function, example: "2w" meaning 2 weeks
+ * @param array		$item
+ * @param string	$item['value_type']	type of item, allowed: ITEM_VALUE_TYPE_FLOAT and ITEM_VALUE_TYPE_UINT64
+ * @param string	$item['itemid']		ID of item
+ * @param string	$item['units']		units of item
+ * @param string	$function			function to apply to time period from param, allowed: min, max and avg
+ * @param string	$parameter			formatted parameter for function, example: "2w" meaning 2 weeks
  *
  * @return string item functional value from history
  */
-function getItemFunctionalValue($item, $function, $param) {
+function getItemFunctionalValue($item, $function, $parameter) {
 	// check whether function is allowed
-	if (!in_array($function, array('min', 'max', 'avg'))) {
+	if (!in_array($function, array('min', 'max', 'avg')) || $parameter === '') {
+		return UNRESOLVED_MACRO_STRING;
+	}
+
+	$parameter = convertFunctionValue($parameter);
+
+	if (bccomp($parameter, 0) == 0) {
 		return UNRESOLVED_MACRO_STRING;
 	}
 
@@ -1034,7 +954,7 @@ function getItemFunctionalValue($item, $function, $param) {
 		$result = DBselect(
 			'SELECT '.$function.'(value) AS value'.
 			' FROM '.$historyTables[$item['value_type']].
-			' WHERE clock>'.(time() - convertFunctionValue($param)).
+			' WHERE clock>'.(time() - $parameter).
 			' AND itemid='.zbx_dbstr($item['itemid']).
 			' HAVING COUNT(*)>0' // necessary because DBselect() return 0 if empty data set, for graph templates
 		);
@@ -1178,22 +1098,22 @@ function getCurrentDelay($delay, array $arrOfFlexIntervals, $now) {
 		return $delay;
 	}
 
-	$currentDelay = SEC_PER_YEAR;
+	$currentDelay = -1;
 
 	foreach ($arrOfFlexIntervals as $flexInterval) {
 		if (sscanf($flexInterval, '%d/%29s', $flexDelay, $flexPeriod) != 2) {
 			continue;
 		}
-		if ($flexDelay < $currentDelay && checkTimePeriod($flexPeriod, $now)) {
+		if (($currentDelay == -1 || $flexDelay < $currentDelay) && checkTimePeriod($flexPeriod, $now)) {
 			$currentDelay = $flexDelay;
 		}
 	}
 
-	if ($currentDelay == SEC_PER_YEAR) {
+	if ($currentDelay == -1) {
 		return $delay;
 	}
 
-	return $currentDelay == 0 ? SEC_PER_YEAR : $currentDelay;
+	return $currentDelay;
 }
 
 /**
@@ -1288,66 +1208,56 @@ function getNextDelayInterval(array $arrOfFlexIntervals, $now, &$nextInterval) {
  *         hh      - hours (0-24)
  *         mm      - minutes (0-59)
  *
- * @param string $interfaceid
- * @param string $itemid
- * @param int $itemType
- * @param int $delay                 default delay
+ * @param string $seed               seed value applied to delay to spread item checks over the delay period
+ * @param int $delay                 default delay, can be overridden
  * @param string $flexIntervals      flexible intervals
  * @param int $now                   current timestamp
  *
  * @return array
  */
-function calculateItemNextcheck($interfaceid, $itemid, $itemType, $delay, $flexIntervals, $now) {
-	if ($delay == 0) {
-		$delay = SEC_PER_YEAR;
-	}
+function calculateItemNextCheck($seed, $delay, $flexIntervals, $now) {
+	// try to find the nearest 'nextcheck' value with condition 'now' < 'nextcheck' < 'now' + SEC_PER_YEAR
+	// if it is not possible to check the item within a year, fail
+	$arrOfFlexIntervals = explode(';', $flexIntervals);
+	$t = $now;
+	$tMax = $now + SEC_PER_YEAR;
+	$try = 0;
 
-	// special processing of active items to see better view in queue
-	if ($itemType == ITEM_TYPE_ZABBIX_ACTIVE) {
-		$nextcheck = $now + $delay;
-	}
-	else {
-		// try to find the nearest 'nextcheck' value with condition 'now' < 'nextcheck' < 'now' + SEC_PER_YEAR
+	while ($t < $tMax) {
+		// calculate 'nextcheck' value for the current interval
+		$currentDelay = getCurrentDelay($delay, $arrOfFlexIntervals, $t);
 
-		$arrOfFlexIntervals = explode(';', $flexIntervals);
-		$t = $now;
-		$tmax = $now + SEC_PER_YEAR;
-		$try = 0;
-
-		$shift = ($itemType == ITEM_TYPE_JMX) ? $interfaceid : $itemid;
-
-		while ($t < $tmax) {
-			// calculate 'nextcheck' value for the current interval
-			$currentDelay = getCurrentDelay($delay, $arrOfFlexIntervals, $t);
-
-			$nextcheck = $currentDelay * floor($t / $currentDelay) + ($shift % $currentDelay);
+		if ($currentDelay != 0) {
+			$nextCheck = $currentDelay * floor($t / $currentDelay) + ($seed % $currentDelay);
 
 			if ($try == 0) {
-				while ($nextcheck <= $t) {
-					$nextcheck += $currentDelay;
+				while ($nextCheck <= $t) {
+					$nextCheck += $currentDelay;
 				}
 			}
 			else {
-				while ($nextcheck < $t) {
-					$nextcheck += $currentDelay;
+				while ($nextCheck < $t) {
+					$nextCheck += $currentDelay;
 				}
-			}
-
-			// 'nextcheck' < end of the current interval ?
-			// the end of the current interval is the beginning of the next interval - 1
-			if (getNextDelayInterval($arrOfFlexIntervals, $t, $nextInterval) && $nextcheck >= $nextInterval) {
-				// 'nextcheck' is beyond the current interval
-				$t = $nextInterval;
-				$try++;
-			}
-			else {
-				break;
 			}
 		}
-		$delay = $currentDelay;
+		else {
+			$nextCheck = ZBX_JAN_2038;
+		}
+
+		// 'nextcheck' < end of the current interval ?
+		// the end of the current interval is the beginning of the next interval - 1
+		if (getNextDelayInterval($arrOfFlexIntervals, $t, $nextInterval) && $nextCheck >= $nextInterval) {
+			// 'nextcheck' is beyond the current interval
+			$t = $nextInterval;
+			$try++;
+		}
+		else {
+			break;
+		}
 	}
 
-	return array('nextcheck' => $nextcheck, 'delay' => $delay);
+	return $nextCheck;
 }
 
 /**

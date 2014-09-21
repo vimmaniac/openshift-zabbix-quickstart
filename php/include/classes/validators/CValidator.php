@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -109,5 +109,30 @@ abstract class CValidator {
 		}
 
 		$this->setError(vsprintf($message, $arguments));
+	}
+
+
+	/**
+	 * Returns string represenation of a variable
+	 *
+	 * @param mixed $value
+	 * @return string
+	 */
+	protected function stringify($value) {
+		if (is_bool($value)) {
+			return $value ? 'true' : 'false';
+		}
+		elseif (is_null($value)) {
+			return 'null';
+		}
+		elseif (is_object($value)) {
+			return get_class($value);
+		}
+		elseif (is_scalar($value)) {
+			return (string)$value;
+		}
+		else {
+			return gettype($value);
+		}
 	}
 }

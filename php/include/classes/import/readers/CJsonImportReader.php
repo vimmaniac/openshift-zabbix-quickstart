@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -29,7 +29,7 @@ class CJsonImportReader extends CImportReader {
 	 * @return array
 	 */
 	public function read($string) {
-		$json = new CJSON;
+		$json = new CJson;
 		return $json->decode($string, true);
 	}
 }

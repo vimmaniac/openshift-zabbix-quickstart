@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -27,8 +27,8 @@ $sysmapWidget->addPageHeader(_('CONFIGURATION OF NETWORK MAPS'));
 // create sysmap form
 $sysmapForm = new CForm();
 $sysmapForm->setName('map.edit.php');
-$sysmapForm->addVar('form', get_request('form', 1));
-$sysmapForm->addVar('form_refresh', get_request('form_refresh', 0) + 1);
+$sysmapForm->addVar('form', getRequest('form', 1));
+
 if (isset($this->data['sysmap']['sysmapid'])) {
 	$sysmapForm->addVar('sysmapid', $this->data['sysmap']['sysmapid']);
 }
@@ -60,7 +60,7 @@ $iconMappingsLink = new CLink(_('show icon mappings'), 'adm.iconmapping.php');
 $iconMappingsLink->setAttribute('target', '_blank');
 $sysmapList->addRow(_('Automatic icon mapping'), array($iconMappingComboBox, SPACE, $iconMappingsLink));
 
-// append multiple checkboxs to form list
+// append multiple checkboxes to form list
 $sysmapList->addRow(_('Icon highlight'), new CCheckBox('highlight', $this->data['sysmap']['highlight'], null, 1));
 $sysmapList->addRow(_('Mark elements on trigger status change'), new CCheckBox('markelements', $this->data['sysmap']['markelements'], null, 1));
 $sysmapList->addRow(_('Expand single problem'), new CCheckBox('expandproblem', $this->data['sysmap']['expandproblem'], null, 1));
@@ -142,7 +142,7 @@ $i = 0;
 foreach ($this->data['sysmap']['urls'] as $url) {
 	$urlLabel = new CTextBox('urls['.$i.'][name]', $url['name'], 32);
 	$urlLink = new CTextBox('urls['.$i.'][url]', $url['url'], 32);
-	$urlEtype = new CCombobox('urls['.$i.'][elementtype]', $url['elementtype']);
+	$urlEtype = new CComboBox('urls['.$i.'][elementtype]', $url['elementtype']);
 	$urlEtype->addItems(sysmap_element_types());
 	$removeButton = new CSpan(_('Remove'), 'link_menu');
 	$removeButton->addAction('onclick', '$("urlEntry_'.$i.'").remove();');
@@ -159,7 +159,7 @@ $templateUrlLabel = new CTextBox('urls[#{id}][name]', '', 32);
 $templateUrlLabel->setAttribute('disabled', 'disabled');
 $templateUrlLink = new CTextBox('urls[#{id}][url]', '', 32);
 $templateUrlLink->setAttribute('disabled', 'disabled');
-$templateUrlEtype = new CCombobox('urls[#{id}][elementtype]');
+$templateUrlEtype = new CComboBox('urls[#{id}][elementtype]');
 $templateUrlEtype->setAttribute('disabled', 'disabled');
 $templateUrlEtype->addItems(sysmap_element_types());
 $templateRemoveButton = new CSpan(_('Remove'), 'link_menu');
@@ -185,14 +185,23 @@ $sysmapTab->addTab('sysmapTab', _('Map'), $sysmapList);
 $sysmapForm->addItem($sysmapTab);
 
 // append buttons to form
-$others = array();
-if (isset($_REQUEST['sysmapid']) && $_REQUEST['sysmapid'] > 0) {
-	$others[] = new CButton('clone', _('Clone'));
-	$others[] = new CButtonDelete(_('Delete network map?'), url_param('form').url_param('sysmapid'));
+if (hasRequest('sysmapid') && getRequest('sysmapid') > 0) {
+	$sysmapForm->addItem(makeFormFooter(
+			new CSubmit('update', _('Update')),
+			array (
+				new	CButton('clone', _('Clone')),
+				new CButtonDelete(_('Delete network map?'), url_param('form').url_param('sysmapid')),
+				new CButtonCancel()
+			)
+	));
 }
-$others[] = new CButtonCancel();
+else {
+	$sysmapForm->addItem(makeFormFooter(
+		new CSubmit('add', _('Add')),
+		new CButtonCancel()
+	));
+}
 
-$sysmapForm->addItem(makeFormFooter(new CSubmit('save', _('Save')), $others));
 
 // append form to widget
 $sysmapWidget->addItem($sysmapForm);

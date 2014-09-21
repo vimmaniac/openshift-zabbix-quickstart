@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -30,9 +30,9 @@ $itemWidget->addPageHeader(_('CONFIGURATION OF ITEMS'));
 // create form
 $itemForm = new CForm();
 $itemForm->setName('itemForm');
-$itemForm->addVar('massupdate', 1);
 $itemForm->addVar('group_itemid', $this->data['itemids']);
 $itemForm->addVar('hostid', $this->data['hostid']);
+$itemForm->addVar('action', $this->data['action']);
 
 // create form list
 $itemFormList = new CFormList('itemFormList');
@@ -50,7 +50,7 @@ $itemFormList->addRow(
 );
 
 // append hosts to form list
-if (!empty($this->data['hosts']) && !empty($this->data['hosts']['interfaces']) && !$this->data['is_multiple_hosts']) {
+if ($this->data['displayInterfaces']) {
 	$interfacesComboBox = new CComboBox('interfaceid', $this->data['interfaceid']);
 	$interfacesComboBox->addItem(new CComboItem(0, '', null, 'no'));
 
@@ -437,7 +437,7 @@ $itemFormList->addRow(
 $valueMapsComboBox = new CComboBox('valuemapid', $this->data['valuemapid']);
 $valueMapsComboBox->addItem(0, _('As is'));
 foreach ($this->data['valuemaps'] as $valuemap) {
-	$valueMapsComboBox->addItem($valuemap['valuemapid'], get_node_name_by_elid($valuemap['valuemapid'], null, NAME_DELIMITER).$valuemap['name']);
+	$valueMapsComboBox->addItem($valuemap['valuemapid'], $valuemap['name']);
 }
 $valueMapLink = new CLink(_('show value mappings'), 'adm.valuemapping.php');
 $valueMapLink->setAttribute('target', '_blank');
@@ -462,12 +462,12 @@ $itemFormList->addRow(
 );
 
 // append applications to form list
-if (!$this->data['is_multiple_hosts']) {
+if ($this->data['displayApplications']) {
 	// replace applications
 	$appToReplace = null;
-	if (isset($_REQUEST['applications'])) {
+	if (hasRequest('applications')) {
 		$getApps = API::Application()->get(array(
-			'applicationids' => $_REQUEST['applications'],
+			'applicationids' => getRequest('applications'),
 			'output' => array('applicationid', 'name')
 		));
 		foreach ($getApps as $getApp) {
@@ -478,30 +478,34 @@ if (!$this->data['is_multiple_hosts']) {
 		}
 	}
 
-	$replaceApp = new CMultiSelect(array(
-			'name' => 'applications[]',
-			'objectName' => 'applications',
-			'objectOptions' => array('hostid' => $this->data['hostid']),
-			'data' => $appToReplace
-		));
+	$replaceApp = new CDiv(new CMultiSelect(array(
+		'name' => 'applications[]',
+		'objectName' => 'applications',
+		'objectOptions' => array('hostid' => $this->data['hostid']),
+		'data' => $appToReplace,
+		'popup' => array(
+			'parameters' => 'srctbl=applications&dstfrm='.$itemForm->getName().'&dstfld1=applications_'.
+				'&srcfld1=applicationid&multiselect=1&noempty=1&hostid='.$this->data['hostid'],
+			'width' => 450,
+			'height' => 450
+		)
+	)), null, 'replaceApp');
 
 	$itemFormList->addRow(
-		array(
-			_('Replace applications'),
-			SPACE,
-			new CVisibilityBox('visible[applications]', isset($this->data['visible']['applications']), 'applications_', _('Original'))
-		),
+		array(_('Replace applications'), SPACE, new CVisibilityBox('visible[applications]',
+			isset($this->data['visible']['applications']), 'replaceApp', _('Original')
+		)),
 		$replaceApp
 	);
 
 	// add new or existing applications
 	$appToAdd = null;
-	if (isset($_REQUEST['new_applications'])) {
-		foreach ($_REQUEST['new_applications'] as $newApplication) {
+	if (hasRequest('new_applications')) {
+		foreach (getRequest('new_applications') as $newApplication) {
 			if (is_array($newApplication) && isset($newApplication['new'])) {
 				$appToAdd[] = array(
 					'id' => $newApplication['new'],
-					'name' => $newApplication['new'] . ' (new)',
+					'name' => $newApplication['new'].' ('._x('new', 'new element in multiselect').')',
 					'isNew' => true
 				);
 			}
@@ -524,20 +528,24 @@ if (!$this->data['is_multiple_hosts']) {
 		}
 	}
 
-	$newApp = new CMultiSelect(array(
-			'name' => 'new_applications[]',
-			'objectName' => 'applications',
-			'objectOptions' => array('hostid' => $this->data['hostid']),
-			'data' => $appToAdd,
-			'addNew' => true
-		));
+	$newApp = new CDiv(new CMultiSelect(array(
+		'name' => 'new_applications[]',
+		'objectName' => 'applications',
+		'objectOptions' => array('hostid' => $this->data['hostid']),
+		'data' => $appToAdd,
+		'addNew' => true,
+		'popup' => array(
+			'parameters' => 'srctbl=applications&dstfrm='.$itemForm->getName().'&dstfld1=new_applications_'.
+				'&srcfld1=applicationid&multiselect=1&noempty=1&hostid='.$this->data['hostid'],
+			'width' => 450,
+			'height' => 450
+		)
+	)), null, 'newApp');
 
 	$itemFormList->addRow(
-		array(
-			_('Add new or existing applications'),
-			SPACE,
-			new CVisibilityBox('visible[new_applications]', isset($this->data['visible']['new_applications']), 'new_applications_', _('Original'))
-		),
+		array(_('Add new or existing applications'), SPACE, new CVisibilityBox('visible[new_applications]',
+			isset($this->data['visible']['new_applications']), 'newApp', _('Original')
+		)),
 		$newApp
 	);
 }
@@ -559,9 +567,12 @@ $itemTab->addTab('itemTab', _('Mass update'), $itemFormList);
 $itemForm->addItem($itemTab);
 
 // append buttons to form
-$itemForm->addItem(makeFormFooter(new CSubmit('update', _('Update')), new CButtonCancel(url_param('groupid').url_param('hostid').url_param('config'))));
+$itemForm->addItem(makeFormFooter(
+	new CSubmit('massupdate', _('Update')),
+	new CButtonCancel(url_param('groupid').url_param('hostid').url_param('config'))
+));
 $itemWidget->addItem($itemForm);
 
-require_once dirname(__FILE__).'/js/configuration.item.edit.js.php';
+require_once dirname(__FILE__).'/js/configuration.item.massupdate.js.php';
 
 return $itemWidget;

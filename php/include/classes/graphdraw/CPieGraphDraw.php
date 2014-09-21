@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -35,10 +35,13 @@ class CPieGraphDraw extends CGraphDraw {
 	/* PRE CONFIG: ADD / SET / APPLY
 	/********************************************************************************************************/
 	public function addItem($itemid, $calc_fnc = CALC_FNC_AVG, $color = null, $type = null) {
-		$this->items[$this->num] = get_item_by_itemid($itemid);
-		$this->items[$this->num]['name'] = itemName($this->items[$this->num]);
+		$items = CMacrosResolverHelper::resolveItemNames(array(get_item_by_itemid($itemid)));
+
+		$this->items[$this->num] = reset($items);
+
 		$host = get_host_by_hostid($this->items[$this->num]['hostid']);
 
+		$this->items[$this->num]['host'] = $host['host'];
 		$this->items[$this->num]['hostname'] = $host['name'];
 		$this->items[$this->num]['color'] = is_null($color) ? 'Dark Green' : $color;
 		$this->items[$this->num]['calc_fnc'] = is_null($calc_fnc) ? CALC_FNC_AVG : $calc_fnc;
@@ -265,7 +268,7 @@ class CPieGraphDraw extends CGraphDraw {
 
 			$this->sum += $item_value;
 
-			$convertedUnit = zbx_strlen(convert_units(array(
+			$convertedUnit = strlen(convert_units(array(
 				'value' => $item_value,
 				'units' => $this->items[$i]['units']
 			)));
@@ -280,25 +283,31 @@ class CPieGraphDraw extends CGraphDraw {
 
 	protected function drawLegend() {
 		$shiftY = $this->shiftY + $this->shiftYLegend;
-		$max_host_len = 0;
-		$max_name_len = 0;
+		$fontSize = 8;
 
-		for ($i = 0; $i < $this->num; $i++) {
-			if (zbx_strlen($this->items[$i]['host']) > $max_host_len) {
-				$max_host_len = zbx_strlen($this->items[$i]['host']);
-			}
-			if (zbx_strlen($this->items[$i]['name']) > $max_name_len) {
-				$max_name_len = zbx_strlen($this->items[$i]['name']);
+		// check if host name will be displayed
+		$displayHostName = (count(array_unique(zbx_objectValues($this->items, 'hostname'))) > 1);
+
+		// calculate function name X shift
+		$functionNameXShift = 0;
+
+		foreach ($this->items as $item) {
+			$name = $displayHostName ? $item['hostname'].': '.$item['name_expanded'] : $item['name_expanded'];
+			$dims = imageTextSize($fontSize, 0, $name);
+
+			if ($dims['width'] > $functionNameXShift) {
+				$functionNameXShift = $dims['width'];
 			}
 		}
 
-		for ($i = 0; $i < $this->num; $i++) {
-			$color = $this->getColor($this->items[$i]['color'], 0);
-			$type = $this->items[$i]['calc_type'];
+		// display items
+		$i = 0;
 
-			$data = &$this->data[$this->items[$i]['itemid']][$type];
+		foreach ($this->items as $item) {
+			$color = $this->getColor($item['color'], 0);
 
-			switch ($this->items[$i]['calc_fnc']) {
+			// function name
+			switch ($item['calc_fnc']) {
 				case CALC_FNC_MIN:
 					$fncName = 'min';
 					$fncRealName = _('min');
@@ -316,33 +325,51 @@ class CPieGraphDraw extends CGraphDraw {
 					$fncName = 'avg';
 					$fncRealName = _('avg');
 			}
-			$datavalue = $this->data[$this->items[$i]['itemid']][$type][$fncName];
 
-			$proc = $this->sum == 0 ? 0 : ($datavalue * 100) / $this->sum;
+			if (isset($this->data[$item['itemid']][$item['calc_type']])
+					&& isset($this->data[$item['itemid']][$item['calc_type']][$fncName])) {
+				$dataValue = $this->data[$item['itemid']][$item['calc_type']][$fncName];
+				$proc = ($this->sum == 0) ? 0 : ($dataValue * 100) / $this->sum;
 
-			if (isset($data) && isset($datavalue)) {
-				$strvalue = sprintf(_('Value').': %s ('.(round($proc) != round($proc, 2) ? '%0.2f' : '%0.0f').'%%)',
+				$strValue = sprintf(_('Value').': %s ('.(round($proc) != round($proc, 2) ? '%0.2f' : '%0.0f').'%%)',
 					convert_units(array(
-						'value' => $datavalue,
+						'value' => $dataValue,
 						'units' => $this->items[$i]['units']
 					)),
 					$proc
 				);
 
-				$str = sprintf('%s: %s [%s] ',
-					str_pad($this->items[$i]['host'], $max_host_len, ' '),
-					str_pad($this->items[$i]['name'], $max_name_len, ' '),
-					$fncRealName
-				);
+				$str = '['.$fncRealName.']';
 			}
 			else {
-				$strvalue = sprintf(_('Value: no data'));
-				$str = sprintf('%s: %s [ '._('no data').' ]',
-					str_pad($this->items[$i]['host'], $max_host_len, ' '),
-					str_pad($this->items[$i]['name'], $max_name_len, ' ')
-				);
+				$strValue = _('Value: no data');
+
+				$str = '['._('no data').']';
 			}
 
+			// item name
+			imageText(
+				$this->im,
+				$fontSize,
+				0,
+				$this->shiftXleft + 15,
+				$this->sizeY + $shiftY + 14 * $i + 5,
+				$this->getColor($this->graphtheme['textcolor'], 0),
+				$displayHostName ? $item['hostname'].': '.$item['name_expanded'] : $item['name_expanded']
+			);
+
+			// function name
+			imageText(
+				$this->im,
+				$fontSize,
+				0,
+				$this->shiftXleft + $functionNameXShift + 30,
+				$this->sizeY + $shiftY + 14 * $i + 5,
+				$this->getColor($this->graphtheme['textcolor'], 0),
+				$str
+			);
+
+			// left square fill
 			imagefilledrectangle(
 				$this->im,
 				$this->shiftXleft,
@@ -352,6 +379,7 @@ class CPieGraphDraw extends CGraphDraw {
 				$color
 			);
 
+			// left square frame
 			imagerectangle(
 				$this->im,
 				$this->shiftXleft,
@@ -361,18 +389,9 @@ class CPieGraphDraw extends CGraphDraw {
 				$this->getColor('Black No Alpha')
 			);
 
-			imageText(
-				$this->im,
-				8,
-				0,
-				$this->shiftXleft + 15,
-				$this->sizeY + $shiftY + 14 * $i + 5,
-				$this->getColor($this->graphtheme['textcolor'], 0),
-				$str
-			);
-
 			$shiftX = $this->fullSizeX - $this->shiftlegendright - $this->shiftXright + 25;
 
+			// right square fill
 			imagefilledrectangle(
 				$this->im,
 				$shiftX - 10,
@@ -382,6 +401,7 @@ class CPieGraphDraw extends CGraphDraw {
 				$color
 			);
 
+			// right square frame
 			imagerectangle(
 				$this->im,
 				$shiftX - 10,
@@ -391,15 +411,18 @@ class CPieGraphDraw extends CGraphDraw {
 				$this->GetColor('Black No Alpha')
 			);
 
+			// item value
 			imagetext(
 				$this->im,
-				8,
+				$fontSize,
 				0,
 				$shiftX + 5,
 				$this->shiftY + 10 + 14 * $i + 10,
 				$this->getColor($this->graphtheme['textcolor'], 0),
-				$strvalue
+				$strValue
 			);
+
+			$i++;
 		}
 
 		if ($this->sizeY < 120) {

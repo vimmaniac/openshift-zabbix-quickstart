@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -59,8 +59,8 @@ $gridAlignAll->setAttribute('id', 'gridalignall');
 $gridForm = new CDiv(array($gridSize, $gridAlignAll));
 $gridForm->setAttribute('id', 'gridalignblock');
 
-$saveButton = new CSubmit('save', _('Save'));
-$saveButton->setAttribute('id', 'sysmap_save');
+$saveButton = new CSubmit('update', _('Update'));
+$saveButton->setAttribute('id', 'sysmap_update');
 
 $menuTable = new CTable(null, 'textwhite');
 $menuTable->addRow(array(

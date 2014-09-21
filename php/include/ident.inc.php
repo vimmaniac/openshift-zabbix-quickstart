@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -27,43 +27,24 @@ function getImageByIdent($ident) {
 	}
 
 	static $images;
-	if (is_null($images)) {
+
+	if ($images === null) {
 		$images = array();
 
 		$dbImages = API::Image()->get(array(
-			'output' => API_OUTPUT_EXTEND,
-			'nodeids' => get_current_nodeid(true)
+			'output' => array('imageid', 'name')
 		));
+
 		foreach ($dbImages as $image) {
 			if (!isset($images[$image['name']])) {
 				$images[$image['name']] = array();
 			}
 
-			$nodeName = get_node_name_by_elid($image['imageid'], true);
-
-			if (!is_null($nodeName)) {
-				$images[$image['name']][$nodeName] = $image;
-			}
-			else {
-				$images[$image['name']][] = $image;
-			}
+			$images[$image['name']][] = $image;
 		}
 	}
 
 	$ident['name'] = trim($ident['name'], ' ');
-	if (!isset($images[$ident['name']])) {
-		return 0;
-	}
 
-	$searchedImages = $images[$ident['name']];
-
-	if (!isset($ident['node'])) {
-		return reset($searchedImages);
-	}
-	elseif (isset($searchedImages[$ident['node']])) {
-		return $searchedImages[$ident['node']];
-	}
-	else {
-		return 0;
-	}
+	return isset($images[$ident['name']]) ? reset($images[$ident['name']]) : 0;
 }

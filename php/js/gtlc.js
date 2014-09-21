@@ -1,6 +1,6 @@
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -273,6 +273,14 @@ var timeControl = {
 			location.href = url.getUrl();
 		}
 		else {
+			// calculate new gradation
+			this.scrollbar.px2sec =
+				(this.timeline.endtime() - this.timeline.starttime()) / this.scrollbar.size.scrollline;
+
+			// scrollbar
+			this.scrollbar.setBarPosition();
+			this.scrollbar.setGhostByBar();
+
 			flickerfreeScreen.refreshAll(period, date.getZBXDate(), this.timeline.isNow());
 		}
 	},
@@ -308,7 +316,7 @@ var timeControl = {
 };
 
 // timeline control
-var CTimeLine = Class.create(CDebug, {
+var CTimeLine = Class.create({
 
 	_starttime:	null,	// timeline start time (left, past)
 	_endtime:	null,	// timeline end time (right, now)
@@ -319,7 +327,7 @@ var CTimeLine = Class.create(CDebug, {
 	minperiod:	3600,	// minimal allowed period
 	maxperiod:	null,	// max period in seconds
 
-	initialize: function($super, period, starttime, usertime, endtime, maximumPeriod, isNow) {
+	initialize: function(period, starttime, usertime, endtime, maximumPeriod, isNow) {
 		if ((endtime - starttime) < (3 * this.minperiod)) {
 			starttime = endtime - (3 * this.minperiod);
 		}
@@ -417,7 +425,7 @@ var CTimeLine = Class.create(CDebug, {
 });
 
 // graph scrolling
-var CScrollBar = Class.create(CDebug, {
+var CScrollBar = Class.create({
 
 	ghostBox:		null, // ghost box object
 	clndrLeft:		null, // calendar object left
@@ -475,7 +483,7 @@ var CScrollBar = Class.create(CDebug, {
 	disabled:		1,		// activates/disables scrollbars
 	maxperiod:		null,	// max period in seconds
 
-	initialize: function($super, width, fixedperiod, maximalPeriod) {
+	initialize: function(width, fixedperiod, maximalPeriod) {
 		try {
 			this.fixedperiod = (fixedperiod == 1) ? 1 : 0;
 			this.maxperiod = maximalPeriod;
@@ -966,15 +974,14 @@ var CScrollBar = Class.create(CDebug, {
 		this.fixedperiod = (this.fixedperiod == 1) ? 0 : 1;
 
 		// sending fixed/dynamic setting to server to save in a profile
-		var params = {
-			favobj: 'timelinefixedperiod',
-			favid: this.fixedperiod
-		};
-		send_params(params);
+		sendAjaxData({
+			data: {
+				favobj: 'timelinefixedperiod',
+				favid: this.fixedperiod
+			}
+		});
 
-		this.dom.period_state.innerHTML = (this.fixedperiod)
-			? locale['S_FIXED_SMALL']
-			: locale['S_DYNAMIC_SMALL'];
+		this.dom.period_state.innerHTML = this.fixedperiod ? locale['S_FIXED_SMALL'] : locale['S_DYNAMIC_SMALL'];
 	},
 
 	getTZOffset: function(time) {
@@ -1471,7 +1478,7 @@ var CScrollBar = Class.create(CDebug, {
 	}
 });
 
-var CGhostBox = Class.create(CDebug, {
+var CGhostBox = Class.create({
 
 	box:		null, // resized dom object
 	sideToMove:	null, // 0 - left side, 1 - right side
@@ -1491,10 +1498,9 @@ var CGhostBox = Class.create(CDebug, {
 		rightSide:	null
 	},
 
-	initialize: function($super, id) {
-		$super('CGhostBox[' + id + ']');
-
+	initialize: function(id) {
 		this.box = $(id);
+
 		if (is_null(this.box)) {
 			throw('Cannot initialize GhostBox with given object id.');
 		}
@@ -1573,7 +1579,7 @@ function sbox_init(id) {
 	return ZBX_SBOX[id];
 }
 
-var sbox = Class.create(CDebug, {
+var sbox = Class.create({
 
 	sbox_id:			'',		// id to create references in array to self
 	mouse_event:		{},		// json object wheres defined needed event params
@@ -1592,7 +1598,7 @@ var sbox = Class.create(CDebug, {
 	is_active:			false,	// flag show is sbox is selected, must be unique among all
 	is_activeIE:		false,
 
-	initialize: function($super, id) {
+	initialize: function(id) {
 		var tc = timeControl.objectList[id],
 			shiftL = parseInt(tc.objDims.shiftXleft),
 			shiftR = parseInt(tc.objDims.shiftXright),

@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -68,25 +68,15 @@ class CAutoloader {
 	 * @return bool|string
 	 */
 	protected function findClassFile($className) {
-		$foundFile = false;
-
 		foreach ($this->includePaths as $includePath) {
 			$filePath = $includePath.'/'.$className.'.php';
 
 			if (is_file($filePath)) {
-				$foundFile = $filePath;
+				return $filePath;
 				break;
-			}
-			else {
-				// fallback to old class names
-				$filePath = $includePath.'/class.'.strtolower($className).'.php';
-				if (is_file($filePath)) {
-					$foundFile = $filePath;
-					break;
-				}
 			}
 		}
 
-		return $foundFile;
+		return false;
 	}
 }

@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -17,8 +17,8 @@
 ** along with this program; if not, write to the Free Software
 ** Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 **/
-?>
-<?php
+
+
 include(dirname(__FILE__).'/js/configuration.services.child.list.js.php');
 
 $servicesChildWidget = new CWidget();
@@ -67,5 +67,5 @@ $servicesChildForm->addItem($servicesChildTable);
 
 // append form to widget
 $servicesChildWidget->addItem($servicesChildForm);
+
 return $servicesChildWidget;
-?>

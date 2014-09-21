@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -231,15 +231,13 @@ abstract class CGraphDraw {
 			$str = $this->items[0]['hostname'].NAME_DELIMITER.$this->items[0]['name'];
 		}
 		else {
-			foreach ($this->items as &$item) {
-				$item['host'] = $item['hostname'];
-			}
-			unset($item);
-
+			// TODO: graphs shouldn't resolve names themselves
 			$str = CMacrosResolverHelper::resolveGraphName($this->header, $this->items);
 		}
 
-		$str .= $this->period2str($this->period);
+		if ($this->period) {
+			$str .= $this->period2str($this->period);
+		}
 
 		// calculate largest font size that can fit graph header
 		// TODO: font size must be dynamic in other parts of the graph as well, like legend, timeline, etc
@@ -264,10 +262,10 @@ abstract class CGraphDraw {
 	}
 
 	public function drawLogo() {
-		imagestringup($this->im, 0,
+		imagestringup($this->im, 1,
 			$this->fullSizeX - 10,
 			$this->fullSizeY - 50,
-			'http://www.zabbix.com',
+			ZABBIX_HOMEPAGE,
 			$this->getColor('Gray')
 		);
 	}

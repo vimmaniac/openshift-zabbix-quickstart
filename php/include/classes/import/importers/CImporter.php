@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -27,17 +27,25 @@ abstract class CImporter {
 	protected $referencer;
 
 	/**
+	 * @var CImportedObjectContainer
+	 */
+	protected $importedObjectContainer;
+
+	/**
 	 * @var array
 	 */
 	protected $options = array();
 
 	/**
-	 * @param array             $options
-	 * @param CImportReferencer $referencer
+	 * @param array						$options					import options "createMissing", "updateExisting" and "deleteMissing"
+	 * @param CImportReferencer			$referencer					class containing all importable objects
+	 * @param CImportedObjectContainer	$importedObjectContainer	class containing processed host and template IDs
 	 */
-	public function __construct(array $options, CImportReferencer $referencer) {
+	public function __construct(array $options, CImportReferencer $referencer,
+			CImportedObjectContainer $importedObjectContainer) {
 		$this->options = $options;
 		$this->referencer = $referencer;
+		$this->importedObjectContainer = $importedObjectContainer;
 	}
 
 	/**

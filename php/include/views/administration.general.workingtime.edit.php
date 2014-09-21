@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -29,9 +29,7 @@ $workingTimeView->addTab('workingTime', _('Working time'), $workingTimeTab);
 
 $workingTimeForm = new CForm();
 $workingTimeForm->setName('workingTimeForm');
-
-$workingTimeForm->addVar('form_refresh', $this->data['form_refresh'] + 1);
 $workingTimeForm->addItem($workingTimeView);
-$workingTimeForm->addItem(makeFormFooter(new CSubmit('save', _('Save'))));
+$workingTimeForm->addItem(makeFormFooter(new CSubmit('update', _('Update'))));
 
 return $workingTimeForm;

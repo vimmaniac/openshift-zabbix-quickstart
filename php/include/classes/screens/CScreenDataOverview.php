@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -33,6 +33,17 @@ class CScreenDataOverview extends CScreenBase {
 			$hostids[$dbHostGroup['hostid']] = $dbHostGroup['hostid'];
 		}
 
-		return $this->getOutput(getItemsDataOverview($hostids, $this->screenitem['application'], $this->screenitem['style']));
+		// application filter
+		$applicationIds = null;
+		if ($this->screenitem['application'] !== '') {
+			$applications = API::Application()->get(array(
+				'output' => array('applicationid'),
+				'hostids' => $hostids,
+				'search' => array('name' => $this->screenitem['application'])
+			));
+			$applicationIds = zbx_objectValues($applications, 'applicationid');
+		}
+
+		return $this->getOutput(getItemsDataOverview($hostids, $applicationIds, $this->screenitem['style']));
 	}
 }

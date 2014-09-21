@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2000-2011 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -17,6 +17,7 @@
 ** along with this program; if not, write to the Free Software
 ** Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 **/
+
 
 $discoveryRule = $data['discovery_rule'];
 $hostPrototype = $data['host_prototype'];
@@ -36,7 +37,7 @@ if (!isset($_REQUEST['form_refresh'])) {
 
 $frmHost = new CForm();
 $frmHost->setName('hostPrototypeForm.');
-$frmHost->addVar('form', get_request('form', 1));
+$frmHost->addVar('form', getRequest('form', 1));
 $frmHost->addVar('parent_discoveryid', $discoveryRule['itemid']);
 
 $hostList = new CFormList('hostlist');
@@ -49,13 +50,13 @@ if ($hostPrototype['templateid'] && $data['parents']) {
 			'?form=update&hostid='.$parent['hostid'].'&parent_discoveryid='.$parent['discoveryRule']['itemid'],
 			'highlight underline weight_normal'
 		);
-		$parents[] = SPACE.RARR.SPACE;
+		$parents[] = SPACE.'&rArr;'.SPACE;
 	}
 	array_pop($parents);
 	$hostList->addRow(_('Parent discovery rules'), $parents);
 }
 
-if ($hostPrototype['hostid']) {
+if (isset($hostPrototype['hostid'])) {
 	$frmHost->addVar('hostid', $hostPrototype['hostid']);
 }
 
@@ -71,15 +72,14 @@ $hostList->addRow(_('Visible name'), $visiblenameTB);
 
 // display inherited parameters only for hosts prototypes on hosts
 if ($parentHost['status'] != HOST_STATUS_TEMPLATE) {
-	$interfaces = array();
 	$existingInterfaceTypes = array();
+
 	foreach ($parentHost['interfaces'] as $interface) {
-		$interface['locked'] = true;
 		$existingInterfaceTypes[$interface['type']] = true;
-		$interfaces[$interface['interfaceid']] = $interface;
 	}
-	zbx_add_post_js('hostInterfacesManager.add('.CJs::encodeJson($interfaces).');');
-	zbx_add_post_js('hostInterfacesManager.disable()');
+
+	zbx_add_post_js('hostInterfacesManager.add('.CJs::encodeJson($parentHost['interfaces']).');');
+	zbx_add_post_js('hostInterfacesManager.disable();');
 
 	// table for agent interfaces with footer
 	$ifTab = new CTable(null, 'formElementTable');
@@ -155,11 +155,7 @@ if ($parentHost['status'] != HOST_STATUS_TEMPLATE) {
 	$hostList->addRow(_('Monitored by proxy'), $proxyTb);
 }
 
-$cmbStatus = new CComboBox('status', $hostPrototype['status']);
-$cmbStatus->addItem(HOST_STATUS_MONITORED, _('Monitored'));
-$cmbStatus->addItem(HOST_STATUS_NOT_MONITORED, _('Not monitored'));
-
-$hostList->addRow(_('Status'), $cmbStatus);
+$hostList->addRow(_('Enabled'), new CCheckBox('status', (HOST_STATUS_MONITORED == $hostPrototype['status']), null, HOST_STATUS_MONITORED));
 
 $divTabs->addTab('hostTab', _('Host'), $hostList);
 
@@ -182,7 +178,13 @@ $groupList->addRow(_('Groups'), new CMultiSelect(array(
 		'filter' => array('flags' => ZBX_FLAG_DISCOVERY_NORMAL)
 	),
 	'data' => $groups,
-	'disabled' => (bool) $hostPrototype['templateid']
+	'disabled' => (bool) $hostPrototype['templateid'],
+	'popup' => array(
+		'parameters' => 'srctbl=host_groups&dstfrm='.$frmHost->getName().'&dstfld1=group_links_'.
+			'&srcfld1=groupid&writeonly=1&multiselect=1&normal_only=1',
+		'width' => 450,
+		'height' => 450
+	)
 )));
 
 // new group prototypes
@@ -217,9 +219,11 @@ $ignoreTemplates = array();
 if ($hostPrototype['templates']) {
 	foreach ($hostPrototype['templates'] as $template) {
 		$tmplList->addVar('templates['.$template['templateid'].']', $template['templateid']);
+		$templateLink = new CLink($template['name'], 'templates.php?form=update&templateid='.$template['templateid']);
+		$templateLink->setTarget('_blank');
 
 		$linkedTemplateTable->addRow(array(
-			$template['name'],
+			$templateLink,
 			!$hostPrototype['templateid'] ? new CSubmit('unlink['.$template['templateid'].']', _('Unlink'), null, 'link_menu') : '',
 		));
 
@@ -242,7 +246,13 @@ if (!$hostPrototype['templateid']) {
 	$newTemplateTable->addRow(array(new CMultiSelect(array(
 		'name' => 'add_templates[]',
 		'objectName' => 'templates',
-		'ignored' => $ignoreTemplates
+		'ignored' => $ignoreTemplates,
+		'popup' => array(
+			'parameters' => 'srctbl=templates&srcfld1=hostid&srcfld2=host&dstfrm='.$frmHost->getName().
+				'&dstfld1=add_templates_&templated_hosts=1&multiselect=1',
+			'width' => 450,
+			'height' => 450
+		)
 	))));
 
 	$newTemplateTable->addRow(array(new CSubmit('add_template', _('Add'), null, 'link_menu')));
@@ -316,17 +326,28 @@ $frmHost->addItem($divTabs);
 /*
  * footer
  */
-$others = array();
-if ($hostPrototype['hostid']) {
-	$btnDelete = new CButtonDelete(_('Delete selected host prototype?'), url_param('form').url_param('hostid').url_param('parent_discoveryid'));
-	$btnDelete->setEnabled(!$hostPrototype['templateid']);
+if (isset($hostPrototype['hostid'])) {
+	$btnDelete = new CButtonDelete(
+		_('Delete selected host prototype?'),
+		url_param('form').url_param('hostid').url_param('parent_discoveryid')
+	);
+	$btnDelete->setEnabled($hostPrototype['templateid'] == 0);
 
-	$others[] = new CSubmit('clone', _('Clone'));
-	$others[] = $btnDelete;
+	$frmHost->addItem(makeFormFooter(
+		new CSubmit('update', _('Update')),
+		array (
+			new CSubmit('clone', _('Clone')),
+			$btnDelete,
+			new CButtonCancel(url_param('parent_discoveryid'))
+		)
+	));
 }
-$others[] = new CButtonCancel(url_param('parent_discoveryid'));
-
-$frmHost->addItem(makeFormFooter(new CSubmit('save', _('Save')), $others));
+else {
+	$frmHost->addItem(makeFormFooter(
+		new CSubmit('add', _('Add')),
+		new CButtonCancel(url_param('parent_discoveryid'))
+	));
+}
 
 $widget->addItem($frmHost);
 

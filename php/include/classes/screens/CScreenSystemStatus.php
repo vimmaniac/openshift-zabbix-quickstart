@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@ class CScreenSystemStatus extends CScreenBase {
 		// rewrite page file
 		$page['file'] = $this->pageFile;
 
-		$item = new CUIWidget('hat_syssum', make_system_status(array(
+		$item = new CUiWidget('hat_syssum', make_system_status(array(
 			'groupids' => null,
 			'hostids' => null,
 			'maintenance' => null,
@@ -44,7 +44,7 @@ class CScreenSystemStatus extends CScreenBase {
 			'screenid' => $this->screenid
 		)));
 		$item->setHeader(_('Status of Zabbix'), SPACE);
-		$item->setFooter(_s('Updated: %s', zbx_date2str(_('H:i:s'))));
+		$item->setFooter(_s('Updated: %s', zbx_date2str(TIME_FORMAT_SECONDS)));
 
 		return $this->getOutput($item);
 	}

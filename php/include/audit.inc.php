@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -39,7 +39,6 @@ function audit_resource2str($resource_type = null) {
 		AUDIT_RESOURCE_IT_SERVICE => _('IT service'),
 		AUDIT_RESOURCE_MAP => _('Map'),
 		AUDIT_RESOURCE_SCREEN => _('Screen'),
-		AUDIT_RESOURCE_NODE => _('Node'),
 		AUDIT_RESOURCE_SCENARIO => _('Scenario'),
 		AUDIT_RESOURCE_DISCOVERY_RULE => _('Discovery rule'),
 		AUDIT_RESOURCE_SLIDESHOW => _('Slide show'),
@@ -64,12 +63,12 @@ function audit_resource2str($resource_type = null) {
 }
 
 function add_audit($action, $resourcetype, $details) {
-	if (CWebUser::$data['userid'] == 0) {
+	if (empty(CWebUser::$data['userid'])) {
 		return true;
 	}
 
-	if (zbx_strlen($details) > 128) {
-		$details = zbx_substr($details, 0, 125).'...';
+	if (mb_strlen($details) > 128) {
+		$details = mb_substr($details, 0, 125).'...';
 	}
 
 	$ip = !empty($_SERVER['HTTP_X_FORWARDED_FOR']) ? $_SERVER['HTTP_X_FORWARDED_FOR'] : $_SERVER['REMOTE_ADDR'];
@@ -110,8 +109,8 @@ function add_audit_ext($action, $resourcetype, $resourceid, $resourcename, $tabl
 		}
 	}
 
-	if (zbx_strlen($resourcename) > 255) {
-		$resourcename = zbx_substr($resourcename, 0, 252).'...';
+	if (mb_strlen($resourcename) > 255) {
+		$resourcename = mb_substr($resourcename, 0, 252).'...';
 	}
 
 	$ip = !empty($_SERVER['HTTP_X_FORWARDED_FOR']) ? $_SERVER['HTTP_X_FORWARDED_FOR'] : $_SERVER['REMOTE_ADDR'];
@@ -151,8 +150,8 @@ function add_audit_ext($action, $resourcetype, $resourceid, $resourcename, $tabl
 }
 
 function add_audit_details($action, $resourcetype, $resourceid, $resourcename, $details = null) {
-	if (zbx_strlen($resourcename) > 255) {
-		$resourcename = zbx_substr($resourcename, 0, 252).'...';
+	if (mb_strlen($resourcename) > 255) {
+		$resourcename = mb_substr($resourcename, 0, 252).'...';
 	}
 
 	$ip = !empty($_SERVER['HTTP_X_FORWARDED_FOR']) ? $_SERVER['HTTP_X_FORWARDED_FOR'] : $_SERVER['REMOTE_ADDR'];

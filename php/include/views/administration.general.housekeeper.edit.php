@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -17,6 +17,7 @@
 ** along with this program; if not, write to the Free Software
 ** Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 **/
+
 
 require_once dirname(__FILE__).'/js/administration.general.housekeeper.edit.js.php';
 
@@ -164,9 +165,10 @@ $houseKeeperView->addTab('houseKeeper', _('Housekeeping'), $houseKeeperTab);
 
 $houseKeeperForm = new CForm();
 $houseKeeperForm->setName('houseKeeperForm');
-$houseKeeperForm->addVar('form_refresh', $this->data['form_refresh'] + 1);
 $houseKeeperForm->addItem($houseKeeperView);
-$houseKeeperForm->addItem(makeFormFooter(new CSubmit('save', _('Save')), new CButton('resetDefaults', _('Reset defaults'))));
+$houseKeeperForm->addItem(makeFormFooter(
+	new CSubmit('update', _('Update')),
+	new CButton('resetDefaults', _('Reset defaults'))
+));
 
 return $houseKeeperForm;
-?>

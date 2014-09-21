@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -52,9 +52,7 @@ $guiView->addTab('gui', _('GUI'), $guiTab);
 
 $guiForm = new CForm();
 $guiForm->setName('guiForm');
-$guiForm->addVar('form_refresh', $this->data['form_refresh'] + 1);
 $guiForm->addItem($guiView);
-$guiForm->addItem(makeFormFooter(new CSubmit('save', _('Save'))));
+$guiForm->addItem(makeFormFooter(new CSubmit('update', _('Update'))));
 
 return $guiForm;
-

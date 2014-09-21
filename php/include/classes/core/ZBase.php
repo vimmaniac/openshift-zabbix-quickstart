@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -74,6 +74,16 @@ class ZBase {
 		$this->rootDir = $this->findRootDir();
 		$this->registerAutoloader();
 
+		// initialize API classes
+		$apiServiceFactory = new CApiServiceFactory();
+
+		$client = new CLocalApiClient();
+		$client->setServiceFactory($apiServiceFactory);
+		$wrapper = new CFrontendApiWrapper($client);
+		$wrapper->setProfiler(CProfiler::getInstance());
+		API::setWrapper($wrapper);
+		API::setApiServiceFactory($apiServiceFactory);
+
 		// system includes
 		require_once $this->getRootDir().'/include/debug.inc.php';
 		require_once $this->getRootDir().'/include/gettextwrapper.inc.php';
@@ -88,7 +98,6 @@ class ZBase {
 		require_once $this->getRootDir().'/include/profiles.inc.php';
 		require_once $this->getRootDir().'/include/locales.inc.php';
 		require_once $this->getRootDir().'/include/db.inc.php';
-		require_once $this->getRootDir().'/include/nodes.inc.php';
 
 		// page specific includes
 		require_once $this->getRootDir().'/include/acknow.inc.php';
@@ -124,27 +133,22 @@ class ZBase {
 			case self::EXEC_MODE_DEFAULT:
 				$this->loadConfigFile();
 				$this->initDB();
-				$this->initNodes();
 				$this->authenticateUser();
-				// init nodes after user is authenticated
-				init_nodes();
 				$this->initLocales();
 				break;
+
 			case self::EXEC_MODE_API:
 				$this->loadConfigFile();
 				$this->initDB();
-				$this->initNodes();
 				$this->initLocales();
 				break;
+
 			case self::EXEC_MODE_SETUP:
 				try {
 					// try to load config file, if it exists we need to init db and authenticate user to check permissions
 					$this->loadConfigFile();
 					$this->initDB();
-					$this->initNodes();
 					$this->authenticateUser();
-					// init nodes after user is authenticated
-					init_nodes();
 					$this->initLocales();
 					DBclose();
 				}
@@ -186,9 +190,12 @@ class ZBase {
 	 */
 	private function getIncludePaths() {
 		return array(
-			$this->rootDir.'/include/classes',
 			$this->rootDir.'/include/classes/core',
 			$this->rootDir.'/include/classes/api',
+			$this->rootDir.'/include/classes/api/services',
+			$this->rootDir.'/include/classes/api/managers',
+			$this->rootDir.'/include/classes/api/clients',
+			$this->rootDir.'/include/classes/api/wrappers',
 			$this->rootDir.'/include/classes/db',
 			$this->rootDir.'/include/classes/debug',
 			$this->rootDir.'/include/classes/validators',
@@ -208,18 +215,27 @@ class ZBase {
 			$this->rootDir.'/include/classes/import/readers',
 			$this->rootDir.'/include/classes/import/formatters',
 			$this->rootDir.'/include/classes/items',
+			$this->rootDir.'/include/classes/triggers',
 			$this->rootDir.'/include/classes/server',
 			$this->rootDir.'/include/classes/screens',
+			$this->rootDir.'/include/classes/services',
 			$this->rootDir.'/include/classes/sysmaps',
 			$this->rootDir.'/include/classes/helpers',
 			$this->rootDir.'/include/classes/helpers/trigger',
 			$this->rootDir.'/include/classes/macros',
 			$this->rootDir.'/include/classes/tree',
 			$this->rootDir.'/include/classes/html',
+			$this->rootDir.'/include/classes/html/pageheader',
+			$this->rootDir.'/include/classes/html/widget',
 			$this->rootDir.'/include/classes/parsers',
-			$this->rootDir.'/api/classes',
-			$this->rootDir.'/api/classes/managers',
-			$this->rootDir.'/api/rpc'
+			$this->rootDir.'/include/classes/parsers/results',
+			$this->rootDir.'/include/classes/routing',
+			$this->rootDir.'/include/classes/json',
+			$this->rootDir.'/include/classes/user',
+			$this->rootDir.'/include/classes/setup',
+			$this->rootDir.'/include/classes/regexp',
+			$this->rootDir.'/include/classes/ldap',
+			$this->rootDir.'/include/classes/pagefilter'
 		);
 	}
 
@@ -306,36 +322,26 @@ class ZBase {
 	}
 
 	/**
-	 * Check if distributed monitoring is enabled.
-	 */
-	protected function initNodes() {
-		global $ZBX_LOCALNODEID, $ZBX_LOCMASTERID, $ZBX_NODES;
-
-		if ($local_node_data = DBfetch(DBselect('SELECT n.* FROM nodes n WHERE n.nodetype=1 ORDER BY n.nodeid'))) {
-			$ZBX_LOCALNODEID = $local_node_data['nodeid'];
-			$ZBX_LOCMASTERID = $local_node_data['masterid'];
-			$ZBX_NODES[$local_node_data['nodeid']] = $local_node_data;
-			define('ZBX_DISTRIBUTED', true);
-		}
-		else {
-			define('ZBX_DISTRIBUTED', false);
-		}
-	}
-
-	/**
-	 * Initilaize translations.
+	 * Initialize translations.
 	 */
 	protected function initLocales() {
 		init_mbstrings();
+
+		$defaultLocales = array(
+			'C', 'POSIX', 'en', 'en_US', 'en_US.UTF-8', 'English_United States.1252', 'en_GB', 'en_GB.UTF-8'
+		);
 
 		if (function_exists('bindtextdomain')) {
 			// initializing gettext translations depending on language selected by user
 			$locales = zbx_locale_variants(CWebUser::$data['lang']);
 			$locale_found = false;
 			foreach ($locales as $locale) {
+				// since LC_MESSAGES may be unavailable on some systems, try to set all of the locales
+				// and then revert some of them back
 				putenv('LC_ALL='.$locale);
 				putenv('LANG='.$locale);
 				putenv('LANGUAGE='.$locale);
+				setlocale(LC_TIME, $locale);
 
 				if (setlocale(LC_ALL, $locale)) {
 					$locale_found = true;
@@ -343,6 +349,12 @@ class ZBase {
 					break;
 				}
 			}
+
+			// reset the LC_CTYPE locale so that case transformation functions would work correctly
+			// it is also required for PHP to work with the Turkish locale (https://bugs.php.net/bug.php?id=18556)
+			// WARNING: this must be done before executing any other code, otherwise code execution could fail!
+			// this will be unnecessary in PHP 5.5
+			setlocale(LC_CTYPE, $defaultLocales);
 
 			if (!$locale_found && CWebUser::$data['lang'] != 'en_GB' && CWebUser::$data['lang'] != 'en_gb') {
 				error('Locale for language "'.CWebUser::$data['lang'].'" is not found on the web server. Tried to set: '.implode(', ', $locales).'. Unable to translate Zabbix interface.');
@@ -352,19 +364,27 @@ class ZBase {
 			textdomain('frontend');
 		}
 
+		// reset the LC_NUMERIC locale so that PHP would always use a point instead of a comma for decimal numbers
+		setlocale(LC_NUMERIC, $defaultLocales);
+
 		// should be after locale initialization
 		require_once $this->getRootDir().'/include/translateDefines.inc.php';
-
-		// numeric Locale to default
-		setlocale(LC_NUMERIC, array('C', 'POSIX', 'en', 'en_US', 'en_US.UTF-8', 'English_United States.1252', 'en_GB', 'en_GB.UTF-8'));
 	}
 
 	/**
 	 * Authenticate user.
 	 */
 	protected function authenticateUser() {
-		if (!CWebUser::checkAuthentication(get_cookie('zbx_sessionid'))) {
+		$sessionId = CWebUser::checkAuthentication(CWebUser::getSessionCookie());
+
+		if (!$sessionId) {
 			CWebUser::setDefault();
 		}
+
+		// set the authentication token for the API
+		API::getWrapper()->auth = $sessionId;
+
+		// enable debug mode in the API
+		API::getWrapper()->debug = CWebUser::getDebugMode();
 	}
 }

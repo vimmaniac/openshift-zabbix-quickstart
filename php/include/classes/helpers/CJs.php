@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -27,7 +27,7 @@ class CJs {
 	/**
 	 * The object used to encode values in JSON.
 	 *
-	 * @var CJSON
+	 * @var CJson
 	 */
 	protected static $json;
 
@@ -43,7 +43,7 @@ class CJs {
 	 */
 	public static function encodeJson($data, $forceObject = false) {
 		if (self::$json === null) {
-			self::$json = new CJSON();
+			self::$json = new CJson();
 		}
 
 		return self::$json->encode($data, array(), $forceObject);
@@ -61,7 +61,7 @@ class CJs {
 	 */
 	public static function decodeJson($data, $asArray = true) {
 		if (self::$json === null) {
-			self::$json = new CJSON();
+			self::$json = new CJson();
 		}
 
 		return self::$json->decode($data, $asArray);

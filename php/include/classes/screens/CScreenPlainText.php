@@ -1,7 +1,7 @@
 <?php
 /*
 ** Zabbix
-** Copyright (C) 2001-2013 Zabbix SIA
+** Copyright (C) 2001-2014 Zabbix SIA
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -44,7 +44,9 @@ class CScreenPlainText extends CScreenBase {
 			return $this->getOutput($table);
 		}
 
-		$item = get_item_by_itemid($this->screenitem['resourceid']);
+		$items = CMacrosResolverHelper::resolveItemNames(array(get_item_by_itemid($this->screenitem['resourceid'])));
+		$item = reset($items);
+
 		switch ($item['value_type']) {
 			case ITEM_VALUE_TYPE_TEXT:
 			case ITEM_VALUE_TYPE_LOG:
@@ -59,7 +61,7 @@ class CScreenPlainText extends CScreenBase {
 		$host = get_host_by_itemid($this->screenitem['resourceid']);
 
 		$table = new CTableInfo(_('No values found.'));
-		$table->setHeader(array(_('Timestamp'), $host['name'].NAME_DELIMITER.itemName($item)));
+		$table->setHeader(array(_('Timestamp'), $host['name'].NAME_DELIMITER.$item['name_expanded']));
 
 		$stime = zbxDateToTime($this->timeline['stime']);
 
@@ -81,7 +83,7 @@ class CScreenPlainText extends CScreenBase {
 				case ITEM_VALUE_TYPE_TEXT:
 				case ITEM_VALUE_TYPE_STR:
 				case ITEM_VALUE_TYPE_LOG:
-					$value = $this->screenitem['style'] ? new CJSscript($history['value']) : $history['value'];
+					$value = $this->screenitem['style'] ? new CJsScript($history['value']) : $history['value'];
 					break;
 				default:
 					$value = $history['value'];
@@ -92,7 +94,9 @@ class CScreenPlainText extends CScreenBase {
 				$value = applyValueMap($value, $item['valuemapid']);
 			}
 
-			$table->addRow(array(zbx_date2str(_('d M Y H:i:s'), $history['clock']), new CCol($value, 'pre')));
+			$class = $this->screenitem['style'] ? null : 'pre';
+
+			$table->addRow(array(zbx_date2str(DATE_TIME_FORMAT_SECONDS, $history['clock']), new CCol($value, $class)));
 		}
 
 		return $this->getOutput($table);
